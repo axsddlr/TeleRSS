@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.db
+*.sqlite
+data/
+# keep migrations tracked
+packages/frontend/dist/
+.DS_Store
+.claude/settings.local.json

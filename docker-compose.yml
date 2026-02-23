@@ -1,0 +1,15 @@
+services:
+  app:
+    build: ./packages/backend
+    ports:
+      - "3000:3000"
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - DATABASE_URL=file:/data/db.sqlite
+      - NODE_ENV=production
+    volumes:
+      - sqlite_data:/data
+    restart: unless-stopped
+
+volumes:
+  sqlite_data:

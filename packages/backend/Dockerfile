@@ -1,0 +1,45 @@
+FROM node:20-alpine AS base
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Build frontend
+FROM base AS frontend-builder
+WORKDIR /app
+COPY pnpm-workspace.yaml package.json ./
+COPY packages/frontend/package.json ./packages/frontend/
+RUN pnpm install --frozen-lockfile --filter frontend
+COPY packages/frontend ./packages/frontend
+RUN pnpm --filter frontend build
+
+# Build backend
+FROM base AS backend-builder
+WORKDIR /app
+COPY pnpm-workspace.yaml package.json ./
+COPY packages/backend/package.json ./packages/backend/
+RUN pnpm install --frozen-lockfile --filter backend
+COPY packages/backend ./packages/backend
+RUN pnpm --filter backend db:generate
+RUN pnpm --filter backend build
+
+# Production image
+FROM node:20-alpine AS runner
+RUN corepack enable && corepack prepare pnpm@latest --activate
+WORKDIR /app
+
+COPY pnpm-workspace.yaml package.json ./
+COPY packages/backend/package.json ./packages/backend/
+
+RUN pnpm install --frozen-lockfile --filter backend --prod
+
+COPY --from=backend-builder /app/packages/backend/dist ./packages/backend/dist
+COPY --from=backend-builder /app/packages/backend/prisma ./packages/backend/prisma
+COPY --from=backend-builder /app/node_modules/.pnpm ./node_modules/.pnpm
+COPY --from=frontend-builder /app/packages/frontend/dist ./packages/backend/public
+
+WORKDIR /app/packages/backend
+
+# Generate Prisma client for the current platform
+RUN npx prisma generate
+
+EXPOSE 3000
+
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]

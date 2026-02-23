@@ -1,0 +1,57 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Feed {
+  id             String          @id @default(cuid())
+  url            String          @unique
+  name           String
+  description    String?
+  checkInterval  Int             @default(15)
+  active         Boolean         @default(true)
+  lastCheckedAt  DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  subscriptions  Subscription[]
+  deliveredItems DeliveredItem[]
+}
+
+model Subscription {
+  id        String   @id @default(cuid())
+  feedId    String
+  feed      Feed     @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  chatId    String
+  chatName  String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([feedId, chatId])
+}
+
+model DeliveredItem {
+  id          String   @id @default(cuid())
+  feedId      String
+  feed        Feed     @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  articleGuid String
+  articleTitle String?
+  chatId      String?
+  deliveredAt DateTime @default(now())
+
+  @@unique([feedId, articleGuid])
+}
+
+model KnownChat {
+  chatId    String   @id
+  chatName  String
+  chatType  String
+  isAdmin   Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}
