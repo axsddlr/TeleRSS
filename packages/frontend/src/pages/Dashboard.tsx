@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
+import { HiRss, HiBell, HiInboxArrowDown } from 'react-icons/hi2';
 import { api } from '../lib/api';
 
-function StatCard({ label, value, icon }: { label: string; value: number; icon: string }) {
+function StatCard({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
       <div className="flex items-center justify-between">
@@ -9,7 +10,7 @@ function StatCard({ label, value, icon }: { label: string; value: number; icon: 
           <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
           <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">{value}</p>
         </div>
-        <span className="text-4xl">{icon}</span>
+        <span className="text-gray-400 dark:text-gray-500">{icon}</span>
       </div>
     </div>
   );
@@ -48,9 +49,9 @@ export default function Dashboard() {
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <StatCard label="Active Feeds" value={stats.totalFeeds} icon="📡" />
-        <StatCard label="Active Subscriptions" value={stats.totalSubs} icon="🔔" />
-        <StatCard label="Articles Delivered (24h)" value={stats.itemsDelivered24h} icon="📬" />
+        <StatCard label="Active Feeds" value={stats.totalFeeds} icon={<HiRss className="w-10 h-10" />} />
+        <StatCard label="Active Subscriptions" value={stats.totalSubs} icon={<HiBell className="w-10 h-10" />} />
+        <StatCard label="Articles Delivered (24h)" value={stats.itemsDelivered24h} icon={<HiInboxArrowDown className="w-10 h-10" />} />
       </div>
 
       {/* Recent Activity */}

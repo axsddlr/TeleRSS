@@ -56,17 +56,21 @@ export function formatArticleMessage(article: ArticleData): FormattedArticle {
 
   const plainDesc = article.description ? cleanDescription(stripHtml(article.description)) : '';
 
-  // Footer line: feed name · author (if any) · date
-  const authorPart = article.author ? ` · ${escapeHtml(article.author)}` : '';
-  const footer = `📰 <b>${feedName}</b>${authorPart} · <i>${date}</i>`;
+  // Header: feed name only
+  const header = `<blockquote>📰 <b>${feedName}</b></blockquote>`;
+
+  // Footer: author + date (feed name removed — it's now at the top)
+  const footer = article.author
+    ? `${escapeHtml(article.author)} · <i>${date}</i>`
+    : `<i>${date}</i>`;
 
   // Full message (for text-only send, link preview will supply the image)
   const descFull = plainDesc ? `\n\n${escapeHtml(truncate(plainDesc, 300))}` : '';
-  const text = `<b><a href="${link}">${title}</a></b>${descFull}\n\n${footer}`;
+  const text = `${header}\n<b><a href="${link}">${title}</a></b>${descFull}\n\n${footer}`;
 
   // Caption (for sendPhoto — max 1024 chars, keep it tight)
   const descCaption = plainDesc ? `\n\n${escapeHtml(truncate(plainDesc, 180))}` : '';
-  const captionRaw = `<b><a href="${link}">${title}</a></b>${descCaption}\n\n${footer}`;
+  const captionRaw = `${header}\n<b><a href="${link}">${title}</a></b>${descCaption}\n\n${footer}`;
   // Trim caption to Telegram's 1024-char limit
   const caption =
     captionRaw.length <= 1024 ? captionRaw : captionRaw.slice(0, 1020).trimEnd() + '…';

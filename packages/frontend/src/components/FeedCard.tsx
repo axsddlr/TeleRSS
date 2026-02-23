@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { HiArrowPath, HiArrowUpTray, HiPencil, HiTrash } from 'react-icons/hi2';
 import { Feed, api } from '../lib/api';
 
 interface Props {
@@ -102,7 +103,7 @@ export default function FeedCard({ feed, onEdit }: Props) {
             title="Check for new articles now"
             className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
           >
-            {refreshMutation.isPending ? '⏳' : '🔄'}
+            <HiArrowPath className={`w-4 h-4 ${refreshMutation.isPending ? 'animate-spin' : ''}`} />
           </button>
           <button
             onClick={handleForcePush}
@@ -110,14 +111,14 @@ export default function FeedCard({ feed, onEdit }: Props) {
             title="Force-push: clear history and re-send all articles"
             className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/30 rounded transition-colors"
           >
-            {forcePushMutation.isPending ? '⏳' : '📤'}
+            <HiArrowUpTray className={`w-4 h-4 ${forcePushMutation.isPending ? 'animate-spin' : ''}`} />
           </button>
           <button
             onClick={() => onEdit(feed)}
             title="Edit feed"
             className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
           >
-            ✏️
+            <HiPencil className="w-4 h-4" />
           </button>
           <button
             onClick={handleDelete}
@@ -125,7 +126,7 @@ export default function FeedCard({ feed, onEdit }: Props) {
             title="Delete feed"
             className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
           >
-            🗑️
+            <HiTrash className="w-4 h-4" />
           </button>
         </div>
       </td>

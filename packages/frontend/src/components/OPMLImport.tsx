@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { HiFolderArrowDown, HiArrowPath, HiChevronUp, HiChevronDown } from 'react-icons/hi2';
 import { api, Feed } from '../lib/api';
 
 interface OPMLFeed {
@@ -195,7 +196,7 @@ export default function OPMLImport() {
               : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
           }`}
         >
-          <div className="text-4xl mb-3">📂</div>
+          <HiFolderArrowDown className="w-12 h-12 text-gray-400 dark:text-gray-500 mb-3" />
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
             Drop your OPML file here, or click to browse
           </p>
@@ -363,7 +364,7 @@ export default function OPMLImport() {
             className="w-full flex items-center justify-between px-4 py-2 bg-red-50 dark:bg-red-900/20 text-sm font-medium text-red-700 dark:text-red-400"
           >
             <span>Failed feeds ({result.failed.length})</span>
-            <span>{failedOpen ? '▲' : '▼'}</span>
+            {failedOpen ? <HiChevronUp className="w-4 h-4" /> : <HiChevronDown className="w-4 h-4" />}
           </button>
           {failedOpen && (
             <ul className="divide-y divide-red-100 dark:divide-red-900">
@@ -410,7 +411,7 @@ export default function OPMLImport() {
                   Syncing…
                 </>
               ) : (
-                '🔄 Sync'
+                <><HiArrowPath className="w-3 h-3" /> Sync</>
               )}
             </button>
           </div>

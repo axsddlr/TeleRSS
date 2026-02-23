@@ -40,6 +40,7 @@ export async function checkFeed(feedId: string): Promise<void> {
   });
 
   if (!feed || !feed.active) return;
+  if (feed.subscriptions.length === 0) return;
 
   let parsedFeed;
   try {
