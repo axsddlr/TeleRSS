@@ -6,6 +6,15 @@ A self-hosted RSS-to-Telegram bot with a web dashboard. Add RSS feeds, assign th
 
 ---
 
+## Branding
+
+- App icon and favicon: `packages/frontend/public/telerss-icon.svg`
+- Used in browser tab favicon and the frontend GUI header/login branding
+
+![TeleRSS Icon](packages/frontend/public/telerss-icon.svg)
+
+---
+
 ## Features
 
 - **Web dashboard** — manage feeds and subscriptions from a browser UI

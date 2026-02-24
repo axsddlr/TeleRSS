@@ -1,7 +1,7 @@
 import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { HiNewspaper } from 'react-icons/hi2';
 import { api, authStorage } from '../lib/api';
+import AppLogo from '../components/AppLogo';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -29,7 +29,7 @@ export default function Login() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gray-900 dark:bg-gray-800 mb-4">
-            <HiNewspaper className="w-7 h-7 text-white" />
+            <AppLogo className="w-8 h-8 rounded-lg" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">TeleRSS</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Sign in to continue</p>
@@ -61,7 +61,7 @@ export default function Login() {
             disabled={loading}
             className="w-full py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
           >
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
       </div>

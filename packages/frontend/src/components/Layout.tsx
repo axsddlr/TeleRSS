@@ -1,7 +1,8 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { HiChartBar, HiRss, HiBell, HiCog8Tooth, HiNewspaper, HiSun, HiMoon, HiArrowRightOnRectangle } from 'react-icons/hi2';
+import { HiChartBar, HiRss, HiBell, HiCog8Tooth, HiSun, HiMoon, HiArrowRightOnRectangle } from 'react-icons/hi2';
 import { useDarkMode } from '../lib/useDarkMode';
 import { authStorage } from '../lib/api';
+import AppLogo from './AppLogo';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: <HiChartBar className="w-5 h-5" /> },
@@ -25,9 +26,9 @@ export default function Layout() {
       <aside className="w-60 bg-gray-900 dark:bg-gray-950 dark:border-r dark:border-gray-800 text-white flex flex-col">
         <div className="px-6 py-5 border-b border-gray-700 dark:border-gray-800">
           <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
-            <HiNewspaper className="w-5 h-5" /> TeleRSS
+            <AppLogo className="w-6 h-6 rounded-md ring-1 ring-white/20" /> TeleRSS
           </h1>
-          <p className="text-xs text-gray-400 mt-1">RSS → Telegram</p>
+          <p className="text-xs text-gray-400 mt-1">RSS to Telegram</p>
         </div>
 
         <nav className="flex-1 py-4">
