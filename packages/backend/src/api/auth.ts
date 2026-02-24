@@ -1,13 +1,22 @@
 import { Router, Request, Response, IRouter } from 'express';
+import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { getSecrets, isPasswordFromEnv, updatePassword, verifyPassword } from '../auth/secrets';
 
 export const authRouter: IRouter = Router();
 
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts, please try again later' },
+});
+
 const loginSchema = z.object({ password: z.string().min(1) });
 
-authRouter.post('/login', (req: Request, res: Response) => {
+authRouter.post('/login', loginLimiter, (req: Request, res: Response) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Password is required' });

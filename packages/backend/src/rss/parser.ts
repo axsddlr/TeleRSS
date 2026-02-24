@@ -77,6 +77,16 @@ function fetchUrl(url: string, redirectsLeft = 5): Promise<string> {
   });
 }
 
+function safeUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'http:' || protocol === 'https:' ? url : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function extractFirstImage(html: string): string | undefined {
   const match = html.match(/<img[^>]+src=["']([^"']+)["']/i);
   const url = match?.[1];
@@ -122,10 +132,10 @@ export async function parseFeed(url: string): Promise<ParsedFeed> {
     return {
       guid,
       title: item.title || 'Untitled',
-      link: item.link || '',
+      link: safeUrl(item.link) ?? '',
       description: item.contentSnippet || item.content || undefined,
       pubDate: item.pubDate ? new Date(item.pubDate) : undefined,
-      imageUrl: extractImageUrl(raw),
+      imageUrl: safeUrl(extractImageUrl(raw)),
       author: (raw.creator || raw.author) as string | undefined,
     };
   });
