@@ -11,7 +11,7 @@ A self-hosted RSS-to-Telegram bot with a web dashboard. Add RSS feeds, assign th
 - App icon and favicon: `packages/frontend/public/telerss-icon.svg`
 - Used in browser tab favicon and the frontend GUI header/login branding
 
-![TeleRSS Icon](packages/frontend/public/telerss-icon.svg)
+<img src="packages/frontend/public/telerss-icon.svg" alt="TeleRSS Icon" width="120" />
 
 ---
 
@@ -176,7 +176,7 @@ docker compose down -v
 
 ### Assigning a feed to a Telegram chat
 
-1. Go to **Subscriptions** → click **Assign Feed to Chat**
+1. Go to **Channels** → click **Assign Feed to Channel**
 2. Select a feed from the dropdown
 3. Enter the Telegram **Chat ID** of the target group or channel
    - Get it via [@userinfobot](https://t.me/userinfobot) or by inspecting your bot's `getUpdates` response
