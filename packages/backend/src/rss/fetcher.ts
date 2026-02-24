@@ -4,6 +4,86 @@ import { parseFeed } from './parser';
 import { getBot } from '../bot/client';
 import { formatArticleMessage, FormattedArticle } from '../bot/formatter';
 
+const RETRYABLE_NETWORK_CODES = new Set([
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'EAI_AGAIN',
+  'ENOTFOUND',
+  'ECONNABORTED',
+  'ECONNREFUSED',
+  'EPIPE',
+]);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableTelegramError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+
+  const maybeErr = err as {
+    code?: unknown;
+    errno?: unknown;
+    status?: unknown;
+    statusCode?: unknown;
+    response?: { error_code?: unknown };
+    cause?: { code?: unknown };
+  };
+
+  const networkCodeCandidates = [
+    maybeErr.code,
+    maybeErr.errno,
+    maybeErr.cause?.code,
+  ];
+
+  for (const candidate of networkCodeCandidates) {
+    if (typeof candidate === 'string' && RETRYABLE_NETWORK_CODES.has(candidate)) {
+      return true;
+    }
+  }
+
+  const statusCandidates = [
+    maybeErr.response?.error_code,
+    maybeErr.status,
+    maybeErr.statusCode,
+  ];
+
+  for (const candidate of statusCandidates) {
+    if (typeof candidate === 'number' && (candidate === 429 || candidate >= 500)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function runWithTelegramRetry<T>(
+  operation: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const maxAttempts = 3;
+  let attempt = 1;
+  let waitMs = 600;
+
+  while (true) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt >= maxAttempts || !isRetryableTelegramError(err)) {
+        throw err;
+      }
+
+      const reason = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `Telegram ${operation} failed (attempt ${attempt}/${maxAttempts}): ${reason}. Retrying in ${waitMs}ms...`,
+      );
+      await sleep(waitMs);
+      attempt++;
+      waitMs *= 2;
+    }
+  }
+}
+
 async function sendArticle(bot: Telegraf, chatId: string, article: FormattedArticle): Promise<void> {
   const replyMarkup = article.link
     ? { inline_keyboard: [[{ text: 'Read more →', url: article.link }]] }
@@ -11,22 +91,26 @@ async function sendArticle(bot: Telegraf, chatId: string, article: FormattedArti
 
   if (article.imageUrl) {
     try {
-      await bot.telegram.sendPhoto(chatId, article.imageUrl, {
-        caption: article.caption,
-        parse_mode: 'HTML',
-        reply_markup: replyMarkup,
-      });
+      await runWithTelegramRetry('sendPhoto', () =>
+        bot.telegram.sendPhoto(chatId, article.imageUrl, {
+          caption: article.caption,
+          parse_mode: 'HTML',
+          reply_markup: replyMarkup,
+        }),
+      );
       return;
     } catch {
       // Image URL invalid or unreachable — fall through to text message
     }
   }
 
-  await bot.telegram.sendMessage(chatId, article.text, {
-    parse_mode: 'HTML',
-    link_preview_options: { show_above_text: true },
-    reply_markup: replyMarkup,
-  });
+  await runWithTelegramRetry('sendMessage', () =>
+    bot.telegram.sendMessage(chatId, article.text, {
+      parse_mode: 'HTML',
+      link_preview_options: { show_above_text: true },
+      reply_markup: replyMarkup,
+    }),
+  );
 }
 
 export async function checkFeed(feedId: string): Promise<void> {
