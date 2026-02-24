@@ -15,6 +15,8 @@ A self-hosted RSS-to-Telegram bot with a web dashboard. Add RSS feeds, assign th
 - **Manual refresh** — trigger an immediate fetch from the dashboard
 - **Active/inactive toggles** — pause a feed or subscription without deleting it
 - **Formatted messages** — clickable title, truncated description, date, and feed name
+- **Single-admin authentication** — password-protected dashboard, no user accounts to manage
+- **OPML import** — bulk-import feeds from any RSS reader export
 
 ---
 
@@ -48,6 +50,10 @@ Edit `packages/backend/.env`:
 TELEGRAM_BOT_TOKEN=your_bot_token_here
 DATABASE_URL=file:./data/db.sqlite
 PORT=3000
+
+# Optional — omit to use auto-generated credentials (see Authentication below)
+# ADMIN_PASSWORD=your-strong-password
+# JWT_SECRET=a-long-random-string
 ```
 
 ### 3. Set up the database
@@ -70,6 +76,41 @@ This starts:
 - **Frontend** on `http://localhost:5173` (Vite dev server, proxies `/api` to backend)
 
 Open `http://localhost:5173` in your browser.
+
+---
+
+## Authentication
+
+TeleRSS protects the dashboard with a single admin password. No user accounts or database setup needed.
+
+### First run
+
+On first start the server generates a random password, prints it **once** to the log, and saves it (as a scrypt hash) to `data/secrets.json`:
+
+```
+==============================================================
+  TeleRSS — First-run credentials generated
+==============================================================
+  Admin password : Xk7mQ2vP9nR4wJhD
+  Saved to       : /data/secrets.json
+==============================================================
+```
+
+For Docker: `docker compose logs app` to read it.
+
+The generated password persists across restarts — you won't see it again unless you delete `data/secrets.json`.
+
+### Setting a permanent password
+
+Log in with the generated password, then go to **Settings → Security** and change it. No restart or config file editing needed.
+
+### Resetting a forgotten password
+
+Set `ADMIN_PASSWORD=newpassword` in your `.env`, restart the server, then log in with that password. Remove the env var afterwards to hand control back to `data/secrets.json`.
+
+### Sessions
+
+JWTs are stored in `localStorage` and expire after 7 days. Click the arrow icon at the bottom of the sidebar to log out.
 
 ---
 
@@ -170,6 +211,8 @@ TeleRSS/
 │   │       ├── index.ts          # Express entry point
 │   │       ├── config.ts         # Typed env config
 │   │       ├── api/              # REST routes
+│   │       ├── auth/             # Credential generation, hashing, persistence
+│   │       ├── middleware/       # JWT auth middleware
 │   │       ├── bot/              # Telegraf client + message formatter
 │   │       ├── rss/              # Feed parser + fetcher
 │   │       ├── scheduler/        # node-cron per-feed jobs
@@ -187,6 +230,9 @@ TeleRSS/
 
 | Method | Path | Description |
 |--------|------|-------------|
+| `POST` | `/api/auth/login` | Exchange password for JWT |
+| `GET` | `/api/auth/status` | Check if password is env-controlled |
+| `POST` | `/api/auth/change-password` | Update admin password |
 | `GET` | `/api/feeds` | List all feeds |
 | `POST` | `/api/feeds` | Create a feed |
 | `PUT` | `/api/feeds/:id` | Update a feed |
@@ -197,6 +243,8 @@ TeleRSS/
 | `PATCH` | `/api/subscriptions/:id` | Toggle active state |
 | `DELETE` | `/api/subscriptions/:id` | Remove a subscription |
 | `GET` | `/api/stats` | Dashboard stats |
+
+All routes except `POST /api/auth/login` require a `Authorization: Bearer <token>` header.
 
 ---
 
@@ -210,5 +258,6 @@ TeleRSS/
 | Telegram | Telegraf |
 | RSS parsing | rss-parser |
 | Scheduling | node-cron |
+| Auth | JWT (jsonwebtoken) + scrypt (built-in Node.js) |
 | Containerization | Docker Compose |
 | Package manager | pnpm workspaces |
