@@ -31,6 +31,12 @@ export default function AssignChatModal({ open, onClose }: Props) {
     enabled: open,
   });
 
+  const { data: botStatus } = useQuery({
+    queryKey: ['botStatus'],
+    queryFn: api.getBotStatus,
+    enabled: open,
+  });
+
   // Auto-switch to manual if no chats discovered
   const effectiveManual = manualMode || (!chatsLoading && botChats.length === 0);
 
@@ -38,6 +44,11 @@ export default function AssignChatModal({ open, onClose }: Props) {
     mutationFn: api.syncBotChats,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['botChats'] });
+      queryClient.invalidateQueries({ queryKey: ['botStatus'] });
+      setError('');
+    },
+    onError: (err: Error) => {
+      setError(`Sync failed: ${err.message}`);
     },
   });
 
@@ -83,6 +94,20 @@ export default function AssignChatModal({ open, onClose }: Props) {
           {error && (
             <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-lg text-red-700 dark:text-red-400 text-sm">
               {error}
+            </div>
+          )}
+
+          {botStatus && (
+            <div
+              className={`mb-4 p-3 rounded-lg border text-xs ${
+                botStatus.connected
+                  ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300'
+                  : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-300'
+              }`}
+            >
+              {botStatus.connected
+                ? `Bot connected as ${botStatus.username ? `@${botStatus.username}` : botStatus.botId}`
+                : 'Bot not connected yet. Verify TELEGRAM_BOT_TOKEN and container logs.'}
             </div>
           )}
 

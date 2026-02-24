@@ -3,6 +3,11 @@ import { config } from '../config';
 import { prisma } from '../db/client';
 
 let botInstance: Telegraf | null = null;
+let botStarted = false;
+let botConnected = false;
+let lastLaunchError: string | null = null;
+let lastLaunchErrorAt: Date | null = null;
+let lastConnectedAt: Date | null = null;
 
 export function getBot(): Telegraf {
   if (!botInstance) {
@@ -15,28 +20,101 @@ export function getBotId(): number | undefined {
   return getBot().botInfo?.id;
 }
 
+export function getBotStatus() {
+  const bot = getBot();
+  return {
+    started: botStarted,
+    connected: botConnected,
+    botId: bot.botInfo?.id ?? null,
+    username: bot.botInfo?.username ?? null,
+    lastConnectedAt,
+    lastLaunchError,
+    lastLaunchErrorAt,
+  };
+}
+
 async function upsertChat(
   chatId: string | number,
   chatName: string,
   chatType: string,
-  botId: number,
+  botId?: number,
 ): Promise<void> {
-  try {
-    const member = await getBot().telegram.getChatMember(chatId, botId);
-    const isAdmin = member.status === 'administrator' || member.status === 'creator';
-    await prisma.knownChat.upsert({
-      where: { chatId: String(chatId) },
-      create: { chatId: String(chatId), chatName, chatType, isAdmin },
-      update: { chatName, chatType, isAdmin },
-    });
-  } catch (err) {
-    // If we can't check membership, still record the chat without admin status
-    await prisma.knownChat.upsert({
-      where: { chatId: String(chatId) },
-      create: { chatId: String(chatId), chatName, chatType, isAdmin: false },
-      update: { chatName, chatType },
-    });
+  if (!chatName) return;
+
+  if (typeof botId === 'number') {
+    try {
+      const member = await getBot().telegram.getChatMember(chatId, botId);
+      const isAdmin = member.status === 'administrator' || member.status === 'creator';
+      await prisma.knownChat.upsert({
+        where: { chatId: String(chatId) },
+        create: { chatId: String(chatId), chatName, chatType, isAdmin },
+        update: { chatName, chatType, isAdmin },
+      });
+      return;
+    } catch {
+      // Fall back to recording chat with unknown admin status.
+    }
   }
+
+  // If we can't check membership, still record the chat without admin status
+  await prisma.knownChat.upsert({
+    where: { chatId: String(chatId) },
+    create: { chatId: String(chatId), chatName, chatType, isAdmin: false },
+    update: { chatName, chatType },
+  });
+}
+
+async function ensureBotInfo(): Promise<void> {
+  const bot = getBot();
+  if (bot.botInfo?.id) return;
+
+  const me = await bot.telegram.getMe();
+  bot.botInfo = me;
+}
+
+async function getBotIdSafe(): Promise<number | undefined> {
+  try {
+    await ensureBotInfo();
+    return getBot().botInfo?.id;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function syncKnownChats(): Promise<{ updated: number; removed: number }> {
+  const botId = await getBotIdSafe();
+  if (!botId) {
+    throw new Error('Bot not ready yet');
+  }
+
+  const chats = await prisma.knownChat.findMany();
+  let updated = 0;
+  let removed = 0;
+
+  await Promise.all(
+    chats.map(async (chat) => {
+      try {
+        const member = await getBot().telegram.getChatMember(chat.chatId, botId);
+        if (member.status === 'left' || member.status === 'kicked') {
+          await prisma.knownChat.delete({ where: { chatId: chat.chatId } });
+          removed++;
+        } else {
+          const isAdmin = member.status === 'administrator' || member.status === 'creator';
+          await prisma.knownChat.update({
+            where: { chatId: chat.chatId },
+            data: { isAdmin },
+          });
+          updated++;
+        }
+      } catch {
+        // Chat may no longer be accessible; remove it
+        await prisma.knownChat.delete({ where: { chatId: chat.chatId } }).catch(() => {});
+        removed++;
+      }
+    }),
+  );
+
+  return { updated, removed };
 }
 
 export function setupChatTracking(): void {
@@ -54,11 +132,9 @@ export function setupChatTracking(): void {
     }
 
     if (chat.type === 'group' || chat.type === 'supergroup' || chat.type === 'channel') {
-      const chatName = chat.title;
-      const botId = getBotId();
-      if (botId) {
-        await upsertChat(chat.id, chatName, chat.type, botId);
-      }
+      const chatName = chat.title ?? 'Untitled Chat';
+      const botId = await getBotIdSafe();
+      await upsertChat(chat.id, chatName, chat.type, botId).catch(() => {});
     }
   });
 
@@ -66,33 +142,40 @@ export function setupChatTracking(): void {
   bot.on('message', async (ctx) => {
     const chat = ctx.chat;
     if (chat.type !== 'group' && chat.type !== 'supergroup') return;
-    const chatName = chat.title;
-    const botId = getBotId();
-    if (botId) {
-      await upsertChat(chat.id, chatName, chat.type, botId).catch(() => {});
-    }
+    const chatName = chat.title ?? 'Untitled Chat';
+    const botId = await getBotIdSafe();
+    await upsertChat(chat.id, chatName, chat.type, botId).catch(() => {});
   });
 
   bot.on('channel_post', async (ctx) => {
     const chat = ctx.chat;
-    const chatName = chat.title;
-    const botId = getBotId();
-    if (botId) {
-      await upsertChat(chat.id, chatName, 'channel', botId).catch(() => {});
-    }
+    const chatName = chat.title ?? 'Untitled Chat';
+    const botId = await getBotIdSafe();
+    await upsertChat(chat.id, chatName, 'channel', botId).catch(() => {});
   });
 }
 
 export async function startBot(): Promise<void> {
   const bot = getBot();
-  bot
-    .launch({
+  botStarted = true;
+
+  try {
+    await bot.launch({
       allowedUpdates: ['my_chat_member', 'message', 'channel_post'],
-    })
-    .catch((err) => {
-      console.error('Bot launch error:', err);
     });
-  console.log('Telegram bot started');
+    await ensureBotInfo();
+
+    botConnected = true;
+    lastLaunchError = null;
+    lastLaunchErrorAt = null;
+    lastConnectedAt = new Date();
+    console.log(`Telegram bot connected as @${bot.botInfo?.username ?? bot.botInfo?.id}`);
+  } catch (err) {
+    botConnected = false;
+    lastLaunchError = err instanceof Error ? err.message : String(err);
+    lastLaunchErrorAt = new Date();
+    console.error('Bot launch error:', err);
+  }
 }
 
 export async function stopBot(): Promise<void> {
@@ -100,4 +183,6 @@ export async function stopBot(): Promise<void> {
     botInstance.stop('SIGTERM');
     botInstance = null;
   }
+  botStarted = false;
+  botConnected = false;
 }

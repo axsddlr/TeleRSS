@@ -29,6 +29,17 @@ export interface BotChat {
   updatedAt: string;
 }
 
+export interface BotStatus {
+  started: boolean;
+  connected: boolean;
+  botId: number | null;
+  username: string | null;
+  lastConnectedAt: string | null;
+  lastLaunchError: string | null;
+  lastLaunchErrorAt: string | null;
+  knownChats: number;
+}
+
 export interface Stats {
   totalFeeds: number;
   totalSubs: number;
@@ -131,6 +142,7 @@ export const api = {
   getStats: () => request<Stats>('/stats'),
 
   // Bot
+  getBotStatus: () => request<BotStatus>('/bot/status'),
   getBotChats: (adminOnly = true) =>
     request<BotChat[]>(`/bot/chats${adminOnly ? '?adminOnly=true' : ''}`),
   syncBotChats: () =>

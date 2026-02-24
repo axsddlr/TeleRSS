@@ -7,6 +7,82 @@ function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleString();
 }
 
+function BotConnectionCard() {
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['botStatus'],
+    queryFn: api.getBotStatus,
+    refetchInterval: 15_000,
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: api.syncBotChats,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['botChats'] });
+      queryClient.invalidateQueries({ queryKey: ['botStatus'] });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="mb-4 px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-500 dark:text-gray-400">
+        Checking Telegram bot status...
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="mb-4 px-4 py-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/30 text-sm text-red-700 dark:text-red-300">
+        Failed to load bot status.
+      </div>
+    );
+  }
+
+  const statusColor = data.connected
+    ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200'
+    : 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200';
+  const identity = data.username ? `@${data.username}` : data.botId ? `ID ${data.botId}` : 'unknown bot';
+
+  return (
+    <div className={`mb-4 px-4 py-3 rounded-lg border text-sm ${statusColor}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="font-medium">
+            {data.connected
+              ? `Telegram connected as ${identity}`
+              : 'Telegram bot is not connected'}
+          </p>
+          <p className="mt-1 text-xs opacity-90">
+            Known chats: {data.knownChats}. Telegram cannot list all existing groups/channels automatically.
+            Send one message in each chat after adding the bot, then click Sync.
+          </p>
+          {data.lastLaunchError && (
+            <p className="mt-1 text-xs opacity-90">Last error: {data.lastLaunchError}</p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => syncMutation.mutate()}
+          disabled={syncMutation.isPending}
+          className="px-3 py-1.5 rounded-md border border-current text-xs font-medium hover:bg-black/5 disabled:opacity-60"
+        >
+          {syncMutation.isPending ? 'Syncing...' : 'Sync'}
+        </button>
+      </div>
+      {syncMutation.isError && (
+        <p className="mt-2 text-xs">Sync failed: {(syncMutation.error as Error).message}</p>
+      )}
+      {syncMutation.isSuccess && (
+        <p className="mt-2 text-xs">
+          Sync complete: {syncMutation.data.updated} updated, {syncMutation.data.removed} removed.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function SubRow({ sub }: { sub: Subscription }) {
   const queryClient = useQueryClient();
 
@@ -90,6 +166,8 @@ export default function Subscriptions() {
           <span>+</span> Assign Feed to Channel
         </button>
       </div>
+
+      <BotConnectionCard />
 
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
         {isLoading ? (
