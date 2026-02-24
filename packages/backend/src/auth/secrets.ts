@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -50,9 +51,24 @@ export function verifyPassword(password: string, stored: string): boolean {
   }
 }
 
+function restrictFilePermissions(filePath: string): void {
+  if (process.platform === 'win32') {
+    // 0o600 is ignored on Windows — use icacls to restrict to current user only
+    const user = process.env.USERNAME;
+    if (!user) return;
+    try {
+      execSync(`icacls "${filePath}" /inheritance:r /grant:r "${user}:F"`, { stdio: 'pipe' });
+    } catch {
+      console.warn('[Auth] Could not set restrictive permissions on secrets.json (icacls failed).');
+    }
+  }
+  // On Unix, mode: 0o600 passed to writeFileSync handles this
+}
+
 function writeSecretsFile(data: Secrets): void {
   fs.mkdirSync(path.dirname(SECRETS_FILE), { recursive: true });
   fs.writeFileSync(SECRETS_FILE, JSON.stringify(data, null, 2), { mode: 0o600 });
+  restrictFilePermissions(SECRETS_FILE);
 }
 
 export function initSecrets(): void {
