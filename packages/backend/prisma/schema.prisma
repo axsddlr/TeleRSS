@@ -7,7 +7,6 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
 }
 
 model Feed {
@@ -25,15 +24,19 @@ model Feed {
 }
 
 model Subscription {
-  id        String   @id @default(cuid())
-  feedId    String
-  feed      Feed     @relation(fields: [feedId], references: [id], onDelete: Cascade)
-  chatId    String
-  chatName  String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id            String   @id @default(cuid())
+  feedId        String
+  feed          Feed     @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  chatId        String
+  chatName      String?
+  topicName     String?
+  topicNameKey  String?
+  topicThreadId Int?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
 
   @@unique([feedId, chatId])
+  @@index([chatId, topicNameKey, topicThreadId])
 }
 
 model DeliveredItem {

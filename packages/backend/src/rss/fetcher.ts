@@ -2,6 +2,7 @@ import { Telegraf } from 'telegraf';
 import { prisma } from '../db/client';
 import { parseFeed } from './parser';
 import { getBot } from '../bot/client';
+import { ensureTopicForSubscription } from '../bot/topics';
 import { formatArticleMessage, FormattedArticle } from '../bot/formatter';
 
 const RETRYABLE_NETWORK_CODES = new Set([
@@ -84,10 +85,42 @@ async function runWithTelegramRetry<T>(
   }
 }
 
-async function sendArticle(bot: Telegraf, chatId: string, article: FormattedArticle): Promise<void> {
+function getTelegramErrorDescription(err: unknown): string {
+  if (!err || typeof err !== 'object') return String(err);
+
+  const maybeErr = err as {
+    response?: { description?: unknown };
+    description?: unknown;
+    message?: unknown;
+  };
+
+  if (typeof maybeErr.response?.description === 'string') return maybeErr.response.description;
+  if (typeof maybeErr.description === 'string') return maybeErr.description;
+  if (typeof maybeErr.message === 'string') return maybeErr.message;
+  return String(err);
+}
+
+function isMissingTopicError(err: unknown): boolean {
+  const description = getTelegramErrorDescription(err).toLowerCase();
+  return (
+    description.includes('message thread not found') ||
+    description.includes('topic was deleted') ||
+    description.includes('message thread is not found')
+  );
+}
+
+async function sendArticle(
+  bot: Telegraf,
+  chatId: string,
+  article: FormattedArticle,
+  messageThreadId?: number,
+): Promise<void> {
   const replyMarkup = article.link
     ? { inline_keyboard: [[{ text: 'Read more →', url: article.link }]] }
     : undefined;
+  const threadOptions = typeof messageThreadId === 'number'
+    ? { message_thread_id: messageThreadId }
+    : {};
 
   if (article.imageUrl) {
     try {
@@ -96,6 +129,7 @@ async function sendArticle(bot: Telegraf, chatId: string, article: FormattedArti
           caption: article.caption,
           parse_mode: 'HTML',
           reply_markup: replyMarkup,
+          ...threadOptions,
         }),
       );
       return;
@@ -109,6 +143,7 @@ async function sendArticle(bot: Telegraf, chatId: string, article: FormattedArti
       parse_mode: 'HTML',
       link_preview_options: { show_above_text: true },
       reply_markup: replyMarkup,
+      ...threadOptions,
     }),
   );
 }
@@ -195,9 +230,45 @@ export async function checkFeed(feedId: string): Promise<void> {
       });
 
       for (const sub of feed.subscriptions) {
+        let threadId = sub.topicThreadId;
+        if (threadId == null) {
+          threadId = await ensureTopicForSubscription({
+            subscriptionId: sub.id,
+            chatId: sub.chatId,
+            feedName: feed.name,
+            topicName: sub.topicName,
+            topicNameKey: sub.topicNameKey,
+            topicThreadId: sub.topicThreadId,
+          });
+        }
+
         try {
-          await sendArticle(bot, sub.chatId, formatted);
+          await sendArticle(bot, sub.chatId, formatted, threadId ?? undefined);
         } catch (err) {
+          if (typeof threadId === 'number' && isMissingTopicError(err)) {
+            try {
+              const recreatedThreadId = await ensureTopicForSubscription({
+                subscriptionId: sub.id,
+                chatId: sub.chatId,
+                feedName: feed.name,
+                topicName: sub.topicName,
+                topicNameKey: sub.topicNameKey,
+                topicThreadId: sub.topicThreadId,
+                forceRecreate: true,
+              });
+
+              if (typeof recreatedThreadId === 'number') {
+                await sendArticle(bot, sub.chatId, formatted, recreatedThreadId);
+                continue;
+              }
+            } catch (recreateErr) {
+              console.error(
+                `Failed to recreate topic for chat ${sub.chatId} and feed ${feed.name}:`,
+                recreateErr,
+              );
+            }
+          }
+
           console.error(`Failed to send message to chat ${sub.chatId}:`, err);
         }
       }
