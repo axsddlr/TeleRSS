@@ -50,7 +50,7 @@ export default function Dashboard() {
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <StatCard label="Active Feeds" value={stats.totalFeeds} icon={<HiRss className="w-10 h-10" />} />
-        <StatCard label="Active Subscriptions" value={stats.totalSubs} icon={<HiBell className="w-10 h-10" />} />
+        <StatCard label="Active Channels" value={stats.totalSubs} icon={<HiBell className="w-10 h-10" />} />
         <StatCard label="Articles Delivered (24h)" value={stats.itemsDelivered24h} icon={<HiInboxArrowDown className="w-10 h-10" />} />
       </div>
 

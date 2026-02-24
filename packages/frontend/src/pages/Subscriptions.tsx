@@ -82,12 +82,12 @@ export default function Subscriptions() {
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Subscriptions</h2>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Channels</h2>
         <button
           onClick={() => setShowAssign(true)}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
         >
-          <span>+</span> Assign Feed to Chat
+          <span>+</span> Assign Feed to Channel
         </button>
       </div>
 
@@ -95,10 +95,10 @@ export default function Subscriptions() {
         {isLoading ? (
           <div className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">Loading…</div>
         ) : error ? (
-          <div className="px-6 py-8 text-center text-red-500">Failed to load subscriptions</div>
+          <div className="px-6 py-8 text-center text-red-500">Failed to load channels</div>
         ) : subscriptions.length === 0 ? (
           <div className="px-6 py-8 text-center text-gray-400 dark:text-gray-500 text-sm">
-            No subscriptions yet. Add feeds first, then assign them to Telegram chats.
+            No channels yet. Add feeds first, then assign them to Telegram chats.
           </div>
         ) : (
           <div className="overflow-x-auto">

@@ -451,8 +451,8 @@ export default function OPMLImport() {
       {assignSuccess !== null && assignSuccess >= 0 && (
         <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl text-sm text-green-700 dark:text-green-400">
           {assignSuccess} subscription{assignSuccess !== 1 ? 's' : ''} created.{' '}
-          <Link to="/subscriptions" className="font-medium underline">
-            Go to Subscriptions →
+          <Link to="/channels" className="font-medium underline">
+            Go to Channels →
           </Link>
         </div>
       )}

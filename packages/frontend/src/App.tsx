@@ -8,6 +8,7 @@ import OPMLImport from './components/OPMLImport';
 import ChangePassword from './pages/ChangePassword';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
+import About from './pages/About';
 
 export default function App() {
   return (
@@ -24,7 +25,9 @@ export default function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="feeds" element={<Feeds />} />
-          <Route path="subscriptions" element={<Subscriptions />} />
+          <Route path="channels" element={<Subscriptions />} />
+          <Route path="subscriptions" element={<Navigate to="/channels" replace />} />
+          <Route path="about" element={<About />} />
           <Route path="settings" element={<Settings />}>
             <Route path="import-opml" element={<OPMLImport />} />
             <Route path="change-password" element={<ChangePassword />} />

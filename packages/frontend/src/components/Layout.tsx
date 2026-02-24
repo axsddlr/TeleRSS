@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { HiChartBar, HiRss, HiBell, HiCog8Tooth, HiSun, HiMoon, HiArrowRightOnRectangle } from 'react-icons/hi2';
+import { HiChartBar, HiRss, HiBell, HiCog8Tooth, HiInformationCircle, HiSun, HiMoon, HiArrowRightOnRectangle } from 'react-icons/hi2';
 import { useDarkMode } from '../lib/useDarkMode';
 import { authStorage } from '../lib/api';
 import AppLogo from './AppLogo';
@@ -7,8 +7,9 @@ import AppLogo from './AppLogo';
 const navItems = [
   { to: '/', label: 'Dashboard', icon: <HiChartBar className="w-5 h-5" /> },
   { to: '/feeds', label: 'Feeds', icon: <HiRss className="w-5 h-5" /> },
-  { to: '/subscriptions', label: 'Subscriptions', icon: <HiBell className="w-5 h-5" /> },
+  { to: '/channels', label: 'Channels', icon: <HiBell className="w-5 h-5" /> },
   { to: '/settings', label: 'Settings', icon: <HiCog8Tooth className="w-5 h-5" /> },
+  { to: '/about', label: 'About', icon: <HiInformationCircle className="w-5 h-5" /> },
 ];
 
 export default function Layout() {
