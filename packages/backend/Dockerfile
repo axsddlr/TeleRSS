@@ -4,7 +4,7 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 # Build frontend
 FROM base AS frontend-builder
 WORKDIR /app
-COPY pnpm-workspace.yaml package.json ./
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY packages/frontend/package.json ./packages/frontend/
 RUN pnpm install --frozen-lockfile --filter frontend
 COPY packages/frontend ./packages/frontend
@@ -13,7 +13,7 @@ RUN pnpm --filter frontend build
 # Build backend
 FROM base AS backend-builder
 WORKDIR /app
-COPY pnpm-workspace.yaml package.json ./
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY packages/backend/package.json ./packages/backend/
 RUN pnpm install --frozen-lockfile --filter backend
 COPY packages/backend ./packages/backend
@@ -25,7 +25,7 @@ FROM node:20-alpine AS runner
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
-COPY pnpm-workspace.yaml package.json ./
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY packages/backend/package.json ./packages/backend/
 
 RUN pnpm install --frozen-lockfile --filter backend --prod
