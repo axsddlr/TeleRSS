@@ -1,6 +1,6 @@
 services:
   app:
-    build: ./packages/backend
+    image: ghcr.io/axsddlr/telerss:latest
     ports:
       - "3000:3000"
     environment:
