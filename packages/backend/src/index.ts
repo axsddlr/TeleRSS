@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { config } from './config';
+import { initSecrets } from './auth/secrets';
 import { apiRouter } from './api/router';
 import { startBot, stopBot, setupChatTracking } from './bot/client';
 import { startScheduler, stopScheduler } from './scheduler';
@@ -26,6 +27,9 @@ if (config.NODE_ENV === 'production') {
 }
 
 async function main() {
+  // Resolve auth credentials before anything else
+  initSecrets();
+
   // Run DB migrations
   await prisma.$connect();
   console.log('Database connected');

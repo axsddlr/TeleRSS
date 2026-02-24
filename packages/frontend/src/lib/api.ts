@@ -44,11 +44,31 @@ export interface ActivityItem {
   deliveredAt: string;
 }
 
+const TOKEN_KEY = 'auth_token';
+
+export const authStorage = {
+  getToken: () => localStorage.getItem(TOKEN_KEY),
+  setToken: (token: string) => localStorage.setItem(TOKEN_KEY, token),
+  clearToken: () => localStorage.removeItem(TOKEN_KEY),
+};
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = authStorage.getToken();
+
   const res = await fetch(`/api${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options?.headers,
+    },
     ...options,
   });
+
+  if (res.status === 401) {
+    authStorage.clearToken();
+    window.location.href = '/login';
+    return new Promise(() => {});  // never resolves; navigation is in flight
+  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -60,6 +80,20 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  // Auth
+  login: (password: string) =>
+    request<{ token: string }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    }),
+  getAuthStatus: () =>
+    request<{ passwordFromEnv: boolean }>('/auth/status'),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: boolean }>('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+
   // Feeds
   getFeeds: () => request<Feed[]>('/feeds'),
   createFeed: (data: { url: string; name: string; checkInterval: number }) =>

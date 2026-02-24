@@ -1,6 +1,7 @@
-import { NavLink, Outlet } from 'react-router-dom';
-import { HiChartBar, HiRss, HiBell, HiCog8Tooth, HiNewspaper, HiSun, HiMoon } from 'react-icons/hi2';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { HiChartBar, HiRss, HiBell, HiCog8Tooth, HiNewspaper, HiSun, HiMoon, HiArrowRightOnRectangle } from 'react-icons/hi2';
 import { useDarkMode } from '../lib/useDarkMode';
+import { authStorage } from '../lib/api';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: <HiChartBar className="w-5 h-5" /> },
@@ -11,6 +12,12 @@ const navItems = [
 
 export default function Layout() {
   const { dark, toggle } = useDarkMode();
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    authStorage.clearToken();
+    navigate('/login', { replace: true });
+  }
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
@@ -45,13 +52,18 @@ export default function Layout() {
 
         <div className="px-6 py-4 border-t border-gray-700 dark:border-gray-800 flex items-center justify-between">
           <p className="text-xs text-gray-500">TeleRSS v1.0</p>
-          <button
-            onClick={toggle}
-            title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-            className="text-gray-400 hover:text-white transition-colors"
-          >
-            {dark ? <HiSun className="w-5 h-5" /> : <HiMoon className="w-5 h-5" />}
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleLogout} title="Sign out" className="text-gray-400 hover:text-white transition-colors">
+              <HiArrowRightOnRectangle className="w-5 h-5" />
+            </button>
+            <button
+              onClick={toggle}
+              title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              {dark ? <HiSun className="w-5 h-5" /> : <HiMoon className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
       </aside>
 

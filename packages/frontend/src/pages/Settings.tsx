@@ -1,8 +1,9 @@
 import { NavLink, Outlet, Navigate, useLocation } from 'react-router-dom';
-import { HiArrowUpTray } from 'react-icons/hi2';
+import { HiArrowUpTray, HiLockClosed } from 'react-icons/hi2';
 
 const subNavItems = [
   { to: '/settings/import-opml', label: 'Import OPML', icon: <HiArrowUpTray className="w-4 h-4" /> },
+  { to: '/settings/change-password', label: 'Security', icon: <HiLockClosed className="w-4 h-4" /> },
 ];
 
 export default function Settings() {
