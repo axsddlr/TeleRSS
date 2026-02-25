@@ -34,6 +34,7 @@ RUN pnpm install --frozen-lockfile --filter backend
 
 COPY --from=backend-builder /app/packages/backend/dist ./packages/backend/dist
 COPY --from=backend-builder /app/packages/backend/prisma ./packages/backend/prisma
+COPY --from=backend-builder /app/packages/backend/prisma.config.ts ./packages/backend/prisma.config.ts
 COPY --from=frontend-builder /app/packages/frontend/dist ./packages/backend/public
 
 WORKDIR /app/packages/backend
@@ -43,4 +44,4 @@ RUN npx prisma generate
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy --config=prisma.config.ts && node dist/index.js"]
