@@ -34,17 +34,21 @@ async function main() {
   await prisma.$connect();
   console.log('Database connected');
 
-  // Register bot update handlers, then start polling
-  setupChatTracking();
-  await startBot();
-
-  // Start scheduler
-  await startScheduler();
-
   // Start HTTP server
   const server = app.listen(config.PORT, () => {
     console.log(`TeleRSS server running on http://localhost:${config.PORT}`);
   });
+
+  // Register bot update handlers, then start polling (without blocking HTTP startup)
+  setupChatTracking();
+  void startBot();
+
+  // Start scheduler without blocking the API/UI if it fails
+  try {
+    await startScheduler();
+  } catch (err) {
+    console.error('Scheduler startup error:', err);
+  }
 
   // Graceful shutdown
   const shutdown = async (signal: string) => {
