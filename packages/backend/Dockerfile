@@ -1,8 +1,9 @@
 FROM node:22-bookworm-slim AS base
+ARG PNPM_VERSION=9.12.2
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 # Build frontend
 FROM base AS frontend-builder
@@ -30,7 +31,8 @@ WORKDIR /app
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY packages/backend/package.json ./packages/backend/
 
-RUN pnpm install --frozen-lockfile --filter backend
+RUN pnpm install --frozen-lockfile --filter backend \
+  && pnpm --filter backend rebuild better-sqlite3
 
 COPY --from=backend-builder /app/packages/backend/dist ./packages/backend/dist
 COPY --from=backend-builder /app/packages/backend/prisma ./packages/backend/prisma
@@ -41,6 +43,7 @@ WORKDIR /app/packages/backend
 
 # Generate Prisma client for the current platform
 RUN npx prisma generate
+RUN node -e "require('better-sqlite3')"
 
 EXPOSE 3000
 
