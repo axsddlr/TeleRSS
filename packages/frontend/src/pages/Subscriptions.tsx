@@ -52,7 +52,9 @@ function BotConnectionCard() {
           <p className="font-medium">
             {data.connected
               ? `Telegram connected as ${identity}`
-              : 'Telegram bot is not connected'}
+              : data.connecting
+                ? 'Telegram bot is connecting...'
+                : 'Telegram bot is not connected'}
           </p>
           <p className="mt-1 text-xs opacity-90">
             Known chats: {data.knownChats}. Telegram cannot list all existing groups/channels automatically.

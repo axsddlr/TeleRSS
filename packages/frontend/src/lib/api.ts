@@ -31,6 +31,7 @@ export interface BotChat {
 
 export interface BotStatus {
   started: boolean;
+  connecting: boolean;
   connected: boolean;
   botId: number | null;
   username: string | null;

@@ -5,9 +5,14 @@ import { prisma } from '../db/client';
 let botInstance: Telegraf | null = null;
 let botStarted = false;
 let botConnected = false;
+let botConnecting = false;
 let lastLaunchError: string | null = null;
 let lastLaunchErrorAt: Date | null = null;
 let lastConnectedAt: Date | null = null;
+let reconnectTimer: NodeJS.Timeout | null = null;
+let launchInFlight: Promise<void> | null = null;
+
+const RECONNECT_DELAY_MS = 15_000;
 
 export function getBot(): Telegraf {
   if (!botInstance) {
@@ -24,6 +29,7 @@ export function getBotStatus() {
   const bot = getBot();
   return {
     started: botStarted,
+    connecting: botConnecting,
     connected: botConnected,
     botId: bot.botInfo?.id ?? null,
     username: bot.botInfo?.username ?? null,
@@ -155,34 +161,66 @@ export function setupChatTracking(): void {
   });
 }
 
+function scheduleReconnect(): void {
+  if (!botStarted || botConnected || reconnectTimer) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    void startBot();
+  }, RECONNECT_DELAY_MS);
+}
+
 export async function startBot(): Promise<void> {
+  if (botConnected) return;
+  if (launchInFlight) {
+    await launchInFlight;
+    return;
+  }
+
   const bot = getBot();
   botStarted = true;
+  botConnecting = true;
 
-  try {
-    await bot.launch({
-      allowedUpdates: ['my_chat_member', 'message', 'channel_post'],
-    });
-    await ensureBotInfo();
+  launchInFlight = (async () => {
+    try {
+      await bot.launch({
+        allowedUpdates: ['my_chat_member', 'message', 'channel_post'],
+      });
+      await ensureBotInfo();
 
-    botConnected = true;
-    lastLaunchError = null;
-    lastLaunchErrorAt = null;
-    lastConnectedAt = new Date();
-    console.log(`Telegram bot connected as @${bot.botInfo?.username ?? bot.botInfo?.id}`);
-  } catch (err) {
-    botConnected = false;
-    lastLaunchError = err instanceof Error ? err.message : String(err);
-    lastLaunchErrorAt = new Date();
-    console.error('Bot launch error:', err);
-  }
+      botConnected = true;
+      lastLaunchError = null;
+      lastLaunchErrorAt = null;
+      lastConnectedAt = new Date();
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      console.log(`Telegram bot connected as @${bot.botInfo?.username ?? bot.botInfo?.id}`);
+    } catch (err) {
+      botConnected = false;
+      lastLaunchError = err instanceof Error ? err.message : String(err);
+      lastLaunchErrorAt = new Date();
+      console.error('Bot launch error:', err);
+      scheduleReconnect();
+    } finally {
+      botConnecting = false;
+      launchInFlight = null;
+    }
+  })();
+
+  await launchInFlight;
 }
 
 export async function stopBot(): Promise<void> {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
   if (botInstance) {
     botInstance.stop('SIGTERM');
     botInstance = null;
   }
   botStarted = false;
+  botConnecting = false;
   botConnected = false;
 }

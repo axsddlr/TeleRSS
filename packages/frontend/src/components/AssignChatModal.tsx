@@ -107,7 +107,12 @@ export default function AssignChatModal({ open, onClose }: Props) {
             >
               {botStatus.connected
                 ? `Bot connected as ${botStatus.username ? `@${botStatus.username}` : botStatus.botId}`
-                : 'Bot not connected yet. Verify TELEGRAM_BOT_TOKEN and container logs.'}
+                : botStatus.connecting
+                  ? 'Bot is connecting to Telegram...'
+                  : 'Bot not connected yet. Verify TELEGRAM_BOT_TOKEN and container logs.'}
+              {!botStatus.connected && botStatus.lastLaunchError && (
+                <p className="mt-1">Last error: {botStatus.lastLaunchError}</p>
+              )}
             </div>
           )}
 
