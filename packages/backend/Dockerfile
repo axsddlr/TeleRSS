@@ -27,7 +27,6 @@ RUN pnpm --filter backend build
 # Production image
 FROM base AS runner
 WORKDIR /app
-ENV NODE_ENV=production
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY packages/backend/package.json ./packages/backend/
@@ -45,6 +44,8 @@ WORKDIR /app/packages/backend
 # Generate Prisma client for the current platform
 RUN npx prisma generate
 RUN node -e "require('better-sqlite3')"
+
+ENV NODE_ENV=production
 
 EXPOSE 3000
 
