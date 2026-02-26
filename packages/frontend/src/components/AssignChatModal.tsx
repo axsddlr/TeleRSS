@@ -44,17 +44,10 @@ export default function AssignChatModal({ open, onClose }: Props) {
 
   // Auto-switch to manual if no chats discovered
   const effectiveManual = manualMode || (!chatsLoading && botChats.length === 0);
-  const normalizedChatId = chatId.trim();
   const availableFeeds = useMemo(() => {
-    if (!normalizedChatId) return feeds;
-
-    const assignedFeedIds = new Set(
-      subscriptions
-        .filter((sub) => sub.chatId === normalizedChatId)
-        .map((sub) => sub.feedId),
-    );
+    const assignedFeedIds = new Set(subscriptions.map((sub) => sub.feedId));
     return feeds.filter((feed) => !assignedFeedIds.has(feed.id));
-  }, [feeds, subscriptions, normalizedChatId]);
+  }, [feeds, subscriptions]);
 
   useEffect(() => {
     if (feedId && !availableFeeds.some((feed) => feed.id === feedId)) {
@@ -155,9 +148,9 @@ export default function AssignChatModal({ open, onClose }: Props) {
                   </option>
                 ))}
               </select>
-              {!!normalizedChatId && availableFeeds.length === 0 && (
+              {availableFeeds.length === 0 && (
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  All feeds are already assigned to this chat.
+                  All feeds are already assigned to a chat.
                 </p>
               )}
             </div>
