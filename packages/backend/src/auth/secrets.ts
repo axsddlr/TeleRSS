@@ -18,7 +18,21 @@ interface SecretsFile {
 let secrets: Secrets | null = null;
 let passwordFromEnv = false;
 
-const SECRETS_FILE = path.resolve(process.cwd(), 'data/secrets.json');
+function resolveSecretsFilePath(): string {
+  const configuredPath = process.env.SECRETS_FILE_PATH;
+  if (configuredPath && configuredPath.trim().length > 0) {
+    return path.resolve(configuredPath.trim());
+  }
+
+  // In Docker we persist DB at /data, so store auth secrets there too.
+  if (process.env.DATABASE_URL?.startsWith('file:/data/') || fs.existsSync('/data')) {
+    return '/data/secrets.json';
+  }
+
+  return path.resolve(process.cwd(), 'data/secrets.json');
+}
+
+const SECRETS_FILE = resolveSecretsFilePath();
 
 // Unambiguous alphabet (no 0/O, 1/l/I)
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
