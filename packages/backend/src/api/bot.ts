@@ -1,12 +1,13 @@
 import { Router, Request, Response, IRouter } from 'express';
 import { prisma } from '../db/client';
-import { getBotStatus, syncKnownChats } from '../bot/client';
+import { getBotStatus, probeBotConnection, syncKnownChats } from '../bot/client';
 
 export const botRouter: IRouter = Router();
 
 // GET /api/bot/status
 botRouter.get('/status', async (_req: Request, res: Response) => {
   try {
+    await probeBotConnection();
     const knownChats = await prisma.knownChat.count();
     res.json({ ...getBotStatus(), knownChats });
   } catch {

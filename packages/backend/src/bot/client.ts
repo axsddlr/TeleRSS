@@ -11,8 +11,11 @@ let lastLaunchErrorAt: Date | null = null;
 let lastConnectedAt: Date | null = null;
 let reconnectTimer: NodeJS.Timeout | null = null;
 let launchInFlight: Promise<void> | null = null;
+let statusProbeInFlight: Promise<void> | null = null;
+let lastStatusProbeAt = 0;
 
 const RECONNECT_DELAY_MS = 15_000;
+const STATUS_PROBE_INTERVAL_MS = 10_000;
 
 export function getBot(): Telegraf {
   if (!botInstance) {
@@ -37,6 +40,44 @@ export function getBotStatus() {
     lastLaunchError,
     lastLaunchErrorAt,
   };
+}
+
+export function markBotApiHealthy(): void {
+  botStarted = true;
+  botConnected = true;
+  botConnecting = false;
+  lastConnectedAt = new Date();
+  lastLaunchError = null;
+  lastLaunchErrorAt = null;
+}
+
+export async function probeBotConnection(): Promise<void> {
+  if (botConnected) return;
+
+  const now = Date.now();
+  if (now - lastStatusProbeAt < STATUS_PROBE_INTERVAL_MS) return;
+  lastStatusProbeAt = now;
+
+  if (statusProbeInFlight) {
+    await statusProbeInFlight;
+    return;
+  }
+
+  statusProbeInFlight = (async () => {
+    try {
+      const bot = getBot();
+      const me = await bot.telegram.getMe();
+      bot.botInfo = me;
+      markBotApiHealthy();
+    } catch (err) {
+      lastLaunchError = err instanceof Error ? err.message : String(err);
+      lastLaunchErrorAt = new Date();
+    } finally {
+      statusProbeInFlight = null;
+    }
+  })();
+
+  await statusProbeInFlight;
 }
 
 async function upsertChat(

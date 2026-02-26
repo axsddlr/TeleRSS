@@ -1,7 +1,7 @@
 import { Telegraf } from 'telegraf';
 import { prisma } from '../db/client';
 import { parseFeed } from './parser';
-import { getBot } from '../bot/client';
+import { getBot, markBotApiHealthy } from '../bot/client';
 import { ensureTopicForSubscription } from '../bot/topics';
 import { formatArticleMessage, FormattedArticle } from '../bot/formatter';
 
@@ -185,6 +185,7 @@ async function sendArticle(
             ...threadOptions,
           }),
         );
+        markBotApiHealthy();
         return;
       } catch (err) {
         if (isRetryableTelegramError(err)) {
@@ -201,6 +202,7 @@ async function sendArticle(
         ...threadOptions,
       }),
     );
+    markBotApiHealthy();
   });
 }
 
