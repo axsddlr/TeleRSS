@@ -14,6 +14,11 @@ const RETRYABLE_NETWORK_CODES = new Set([
   'ECONNREFUSED',
   'EPIPE',
 ]);
+const PER_CHAT_MIN_INTERVAL_MS = 1_250;
+const RETRY_AFTER_BUFFER_MS = 500;
+
+const chatDeliveryQueue = new Map<string, Promise<void>>();
+const lastChatSendAt = new Map<string, number>();
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -58,11 +63,56 @@ function isRetryableTelegramError(err: unknown): boolean {
   return false;
 }
 
+function getTelegramRetryAfterMs(err: unknown): number | null {
+  if (!err || typeof err !== 'object') return null;
+
+  const maybeErr = err as {
+    response?: { parameters?: { retry_after?: unknown } };
+  };
+
+  const retryAfter = maybeErr.response?.parameters?.retry_after;
+  if (typeof retryAfter !== 'number' || !Number.isFinite(retryAfter) || retryAfter <= 0) {
+    return null;
+  }
+
+  return retryAfter * 1_000 + RETRY_AFTER_BUFFER_MS;
+}
+
+async function withChatDeliveryLock<T>(chatId: string, task: () => Promise<T>): Promise<T> {
+  const previous = chatDeliveryQueue.get(chatId) ?? Promise.resolve();
+
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  chatDeliveryQueue.set(chatId, previous.catch(() => {}).then(() => current));
+
+  await previous.catch(() => {});
+
+  try {
+    const now = Date.now();
+    const lastSentAt = lastChatSendAt.get(chatId) ?? 0;
+    const waitMs = Math.max(0, lastSentAt + PER_CHAT_MIN_INTERVAL_MS - now);
+    if (waitMs > 0) {
+      await sleep(waitMs);
+    }
+
+    return await task();
+  } finally {
+    lastChatSendAt.set(chatId, Date.now());
+    release();
+    const queued = chatDeliveryQueue.get(chatId);
+    if (queued === current) {
+      chatDeliveryQueue.delete(chatId);
+    }
+  }
+}
+
 async function runWithTelegramRetry<T>(
   operation: string,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const maxAttempts = 3;
+  const maxAttempts = 5;
   let attempt = 1;
   let waitMs = 600;
 
@@ -74,13 +124,15 @@ async function runWithTelegramRetry<T>(
         throw err;
       }
 
+      const retryAfterMs = getTelegramRetryAfterMs(err);
+      const effectiveWaitMs = retryAfterMs ?? waitMs;
       const reason = err instanceof Error ? err.message : String(err);
       console.warn(
-        `Telegram ${operation} failed (attempt ${attempt}/${maxAttempts}): ${reason}. Retrying in ${waitMs}ms...`,
+        `Telegram ${operation} failed (attempt ${attempt}/${maxAttempts}): ${reason}. Retrying in ${effectiveWaitMs}ms...`,
       );
-      await sleep(waitMs);
+      await sleep(effectiveWaitMs);
       attempt++;
-      waitMs *= 2;
+      waitMs = Math.min(waitMs * 2, 10_000);
     }
   }
 }
@@ -122,30 +174,34 @@ async function sendArticle(
     ? { message_thread_id: messageThreadId }
     : {};
 
-  if (article.imageUrl) {
-    try {
-      await runWithTelegramRetry('sendPhoto', () =>
-        bot.telegram.sendPhoto(chatId, article.imageUrl, {
-          caption: article.caption,
-          parse_mode: 'HTML',
-          reply_markup: replyMarkup,
-          ...threadOptions,
-        }),
-      );
-      return;
-    } catch {
-      // Image URL invalid or unreachable — fall through to text message
+  await withChatDeliveryLock(chatId, async () => {
+    if (article.imageUrl) {
+      try {
+        await runWithTelegramRetry('sendPhoto', () =>
+          bot.telegram.sendPhoto(chatId, article.imageUrl, {
+            caption: article.caption,
+            parse_mode: 'HTML',
+            reply_markup: replyMarkup,
+            ...threadOptions,
+          }),
+        );
+        return;
+      } catch (err) {
+        if (isRetryableTelegramError(err)) {
+          throw err;
+        }
+      }
     }
-  }
 
-  await runWithTelegramRetry('sendMessage', () =>
-    bot.telegram.sendMessage(chatId, article.text, {
-      parse_mode: 'HTML',
-      link_preview_options: { show_above_text: true },
-      reply_markup: replyMarkup,
-      ...threadOptions,
-    }),
-  );
+    await runWithTelegramRetry('sendMessage', () =>
+      bot.telegram.sendMessage(chatId, article.text, {
+        parse_mode: 'HTML',
+        link_preview_options: { show_above_text: true },
+        reply_markup: replyMarkup,
+        ...threadOptions,
+      }),
+    );
+  });
 }
 
 export async function checkFeed(feedId: string): Promise<void> {
@@ -196,26 +252,7 @@ export async function checkFeed(feedId: string): Promise<void> {
     });
 
     if (existing) continue;
-
-    // Record as delivered BEFORE sending — prevents re-delivery if the process
-    // crashes after a successful Telegram send but before the DB write.
-    try {
-      await prisma.deliveredItem.create({
-        data: {
-          feedId,
-          articleGuid: item.guid,
-          articleTitle: item.title,
-          chatId: feed.subscriptions[0]?.chatId,
-        },
-      });
-    } catch (err) {
-      // Unique constraint = another process already claimed this item; skip it.
-      if (err instanceof Error && err.message.includes('Unique constraint')) continue;
-      console.error('Error recording delivered item:', err);
-      continue;
-    }
-
-    newItemCount++;
+    let sentToAnySubscription = false;
 
     // Send to all active subscriptions
     if (feed.subscriptions.length > 0) {
@@ -244,6 +281,7 @@ export async function checkFeed(feedId: string): Promise<void> {
 
         try {
           await sendArticle(bot, sub.chatId, formatted, threadId ?? undefined);
+          sentToAnySubscription = true;
         } catch (err) {
           if (typeof threadId === 'number' && isMissingTopicError(err)) {
             try {
@@ -259,6 +297,7 @@ export async function checkFeed(feedId: string): Promise<void> {
 
               if (typeof recreatedThreadId === 'number') {
                 await sendArticle(bot, sub.chatId, formatted, recreatedThreadId);
+                sentToAnySubscription = true;
                 continue;
               }
             } catch (recreateErr) {
@@ -272,6 +311,28 @@ export async function checkFeed(feedId: string): Promise<void> {
           console.error(`Failed to send message to chat ${sub.chatId}:`, err);
         }
       }
+    }
+    if (!sentToAnySubscription) {
+      console.warn(
+        `No deliveries succeeded for "${feed.name}" item "${item.title ?? item.guid}". Will retry on next run.`,
+      );
+      continue;
+    }
+
+    try {
+      await prisma.deliveredItem.create({
+        data: {
+          feedId,
+          articleGuid: item.guid,
+          articleTitle: item.title,
+          chatId: feed.subscriptions[0]?.chatId,
+        },
+      });
+      newItemCount++;
+    } catch (err) {
+      // Unique constraint = another process already claimed this item; skip it.
+      if (err instanceof Error && err.message.includes('Unique constraint')) continue;
+      console.error('Error recording delivered item:', err);
     }
   }
 
