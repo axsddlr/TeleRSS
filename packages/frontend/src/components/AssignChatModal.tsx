@@ -1,5 +1,5 @@
 import { Dialog } from '@headlessui/react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 
@@ -21,6 +21,11 @@ export default function AssignChatModal({ open, onClose }: Props) {
     queryKey: ['feeds'],
     queryFn: api.getFeeds,
   });
+  const { data: subscriptions = [] } = useQuery({
+    queryKey: ['subscriptions'],
+    queryFn: api.getSubscriptions,
+    enabled: open,
+  });
 
   const {
     data: botChats = [],
@@ -39,6 +44,23 @@ export default function AssignChatModal({ open, onClose }: Props) {
 
   // Auto-switch to manual if no chats discovered
   const effectiveManual = manualMode || (!chatsLoading && botChats.length === 0);
+  const normalizedChatId = chatId.trim();
+  const availableFeeds = useMemo(() => {
+    if (!normalizedChatId) return feeds;
+
+    const assignedFeedIds = new Set(
+      subscriptions
+        .filter((sub) => sub.chatId === normalizedChatId)
+        .map((sub) => sub.feedId),
+    );
+    return feeds.filter((feed) => !assignedFeedIds.has(feed.id));
+  }, [feeds, subscriptions, normalizedChatId]);
+
+  useEffect(() => {
+    if (feedId && !availableFeeds.some((feed) => feed.id === feedId)) {
+      setFeedId('');
+    }
+  }, [feedId, availableFeeds]);
 
   const syncMutation = useMutation({
     mutationFn: api.syncBotChats,
@@ -127,12 +149,17 @@ export default function AssignChatModal({ open, onClose }: Props) {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Select a feed…</option>
-                {feeds.map((f) => (
+                {availableFeeds.map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.name}
                   </option>
                 ))}
               </select>
+              {!!normalizedChatId && availableFeeds.length === 0 && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  All feeds are already assigned to this chat.
+                </p>
+              )}
             </div>
 
             <div>
