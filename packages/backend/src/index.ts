@@ -26,6 +26,7 @@ app.use(helmet({
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
       frameSrc: ["'none'"],
+      upgradeInsecureRequests: null, // Disable — app may run on HTTP (no HTTPS proxy)
     },
   },
   crossOriginEmbedderPolicy: false, // Disabled for SPA compatibility
