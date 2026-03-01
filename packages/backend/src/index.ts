@@ -1,4 +1,5 @@
 import express from 'express';
+import helmet from 'helmet';
 import path from 'path';
 import { config } from './config';
 import { initSecrets } from './auth/secrets';
@@ -9,8 +10,33 @@ import { prisma } from './db/client';
 
 const app = express();
 
+// Security headers - must be first
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"], // Required for inline styles
+      imgSrc: ["'self'", 'data:', 'https:', 'http:'], // Allow images from feed sources
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Disabled for SPA compatibility
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Additional security headers
+app.use((req, res, next) => {
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
 
 // API routes
 app.use('/api', apiRouter);

@@ -1,6 +1,8 @@
 import Parser from 'rss-parser';
 import https from 'https';
 import http from 'http';
+import ipaddr from 'ipaddr.js';
+import { URL } from 'url';
 
 export interface ParsedFeed {
   title: string;
@@ -35,14 +37,70 @@ const HEADERS: Record<string, string> = {
   'Cache-Control': 'no-cache',
 };
 
+// Allowed MIME types for RSS/Atom feeds
+const ALLOWED_CONTENT_TYPES = [
+  'application/rss+xml',
+  'application/atom+xml',
+  'application/xml',
+  'text/xml',
+  'text/plain',
+  'application/xml',
+];
+
+/**
+ * Check if an IP address is safe to connect to (blocks private/internal IPs)
+ */
+function isSafeIP(ip: string): boolean {
+  try {
+    const addr = ipaddr.parse(ip);
+    // Only allow unicast addresses (public IPs)
+    return addr.range() === 'unicast';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validate that a URL does not point to internal/private resources
+ */
+function validateUrlSafety(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname;
+
+    // Skip validation for non-IP hostnames (they'll be resolved later)
+    if (!ipaddr.isValid(hostname)) {
+      return true;
+    }
+
+    return isSafeIP(hostname);
+  } catch {
+    return false;
+  }
+}
+
 function fetchUrl(url: string, redirectsLeft = 5): Promise<string> {
   return new Promise((resolve, reject) => {
+    // Validate URL safety on initial request and each redirect
+    if (!validateUrlSafety(url)) {
+      reject(new Error('URL points to internal/private network'));
+      return;
+    }
+
     const parsed = new URL(url);
     const lib = parsed.protocol === 'https:' ? https : http;
 
     const req = lib.get(
       { hostname: parsed.hostname, path: parsed.pathname + parsed.search, headers: HEADERS },
       (res) => {
+        // Validate Content-Type to prevent XML injection attacks
+        const contentType = res.headers['content-type']?.toLowerCase() ?? '';
+        const isAllowedType = ALLOWED_CONTENT_TYPES.some(type => contentType.includes(type));
+        if (!isAllowedType && res.statusCode === 200) {
+          reject(new Error(`Invalid content type: ${contentType}`));
+          return;
+        }
+
         if (
           res.statusCode &&
           res.statusCode >= 300 &&
