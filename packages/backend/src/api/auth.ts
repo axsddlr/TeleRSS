@@ -16,6 +16,23 @@ const loginLimiter = rateLimit({
 
 const loginSchema = z.object({ password: z.string().min(1) });
 
+// Cookie configuration for secure JWT storage
+const COOKIE_OPTIONS: CookieSerializeOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+  sameSite: 'strict',
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  path: '/',
+};
+
+interface CookieSerializeOptions {
+  httpOnly: boolean;
+  secure?: boolean;
+  sameSite: 'strict' | 'lax' | 'none';
+  maxAge: number;
+  path: string;
+}
+
 authRouter.post('/login', loginLimiter, (req: Request, res: Response) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -30,7 +47,16 @@ authRouter.post('/login', loginLimiter, (req: Request, res: Response) => {
   }
 
   const token = jwt.sign({ role: 'admin' }, jwtSecret, { expiresIn: '7d' });
-  res.json({ token });
+  
+  // Set JWT as httpOnly cookie (not accessible via JavaScript)
+  res.cookie('auth_token', token, COOKIE_OPTIONS);
+  res.json({ ok: true });
+});
+
+// Logout endpoint to clear the cookie
+authRouter.post('/logout', (_req: Request, res: Response) => {
+  res.clearCookie('auth_token', { path: '/' });
+  res.json({ ok: true });
 });
 
 // Protected routes (requireAuth is applied in router.ts before these are mounted)

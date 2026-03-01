@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { HiChartBar, HiRss, HiBell, HiCog8Tooth, HiInformationCircle, HiSun, HiMoon, HiArrowRightOnRectangle } from 'react-icons/hi2';
 import { useDarkMode } from '../lib/useDarkMode';
-import { authStorage } from '../lib/api';
+import { api, authStorage } from '../lib/api';
 import AppLogo from './AppLogo';
 
 const navItems = [
@@ -16,7 +16,12 @@ export default function Layout() {
   const { dark, toggle } = useDarkMode();
   const navigate = useNavigate();
 
-  function handleLogout() {
+  async function handleLogout() {
+    try {
+      await api.logout();
+    } catch {
+      // Ignore logout errors - still clear local state
+    }
     authStorage.clearToken();
     navigate('/login', { replace: true });
   }

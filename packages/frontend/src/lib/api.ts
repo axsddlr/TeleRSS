@@ -58,21 +58,26 @@ export interface ActivityItem {
 
 const TOKEN_KEY = 'auth_token';
 
+// Auth storage now uses sessionStorage for login state tracking only
+// Actual JWT is stored in httpOnly cookie by the server
 export const authStorage = {
-  getToken: () => localStorage.getItem(TOKEN_KEY),
-  setToken: (token: string) => localStorage.setItem(TOKEN_KEY, token),
-  clearToken: () => localStorage.removeItem(TOKEN_KEY),
+  getToken: () => sessionStorage.getItem(TOKEN_KEY),
+  setToken: (_token: string) => {
+    // Token is now stored in httpOnly cookie, but we store a flag for UI state
+    sessionStorage.setItem(TOKEN_KEY, 'authenticated');
+  },
+  clearToken: () => sessionStorage.removeItem(TOKEN_KEY),
+  isAuthenticated: () => sessionStorage.getItem(TOKEN_KEY) !== null,
 };
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = authStorage.getToken();
-
+  // Cookies are sent automatically by the browser
   const res = await fetch(`/api${path}`, {
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options?.headers,
     },
+    credentials: 'same-origin', // Include cookies for same-origin requests
     ...options,
   });
 
@@ -94,9 +99,13 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
   // Auth
   login: (password: string) =>
-    request<{ token: string }>('/auth/login', {
+    request<{ ok: boolean }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ password }),
+    }),
+  logout: () =>
+    request<{ ok: boolean }>('/auth/logout', {
+      method: 'POST',
     }),
   getAuthStatus: () =>
     request<{ passwordFromEnv: boolean }>('/auth/status'),
