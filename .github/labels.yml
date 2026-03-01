@@ -1,0 +1,14 @@
+# GitHub Labels Configuration
+# Use with github-label-sync or manually create these labels
+
+- name: "dependencies"
+  color: "0366d6"
+  description: "Pull requests that update dependencies"
+
+- name: "ci/cd"
+  color: "0075ca"
+  description: "CI/CD pipeline updates"
+
+- name: "security"
+  color: "d73a4a"
+  description: "Security-related updates"
