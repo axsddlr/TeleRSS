@@ -16,9 +16,9 @@
     "lint": "eslint src/"
   },
   "dependencies": {
-    "@prisma/adapter-better-sqlite3": "^7.4.2",
+    "@libsql/client": "^0.15.5",
+    "@prisma/adapter-libsql": "^7.4.2",
     "@prisma/client": "^7.4.2",
-    "better-sqlite3": "^12.6.2",
     "prisma": "^7.4.2",
     "cookie-parser": "^1.4.7",
     "csrf-csrf": "^3.0.2",

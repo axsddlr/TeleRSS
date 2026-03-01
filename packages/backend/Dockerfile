@@ -29,22 +29,18 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 
 ARG PNPM_VERSION=10.30.3
-# openssl: required by Prisma; libc6-compat: glibc shim for native modules
-RUN apk add --no-cache openssl libc6-compat \
+# openssl: required by the Prisma query engine
+RUN apk add --no-cache openssl \
   && corepack enable \
   && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY packages/backend/package.json ./packages/backend/
 
-# Install production deps only.
-# Build tools (python3 make g++) are added so better-sqlite3 can compile from
-# source if no musl prebuilt is available, then removed in the same layer so
-# they add zero bytes to the final image. The pnpm store is also wiped here
-# since node_modules/.pnpm already has hard-linked copies of every file.
-RUN apk add --no-cache python3 make g++ \
-  && pnpm install --frozen-lockfile --prod --filter backend \
-  && apk del python3 make g++ \
+# Production deps only; no native modules, so no build tools needed.
+# Wipe the pnpm content-store after install — node_modules/.pnpm already
+# holds the package files via hard links, so the store is redundant in the image.
+RUN pnpm install --frozen-lockfile --prod --filter backend \
   && rm -rf /root/.local/share/pnpm/store /var/cache/apk/*
 
 COPY --from=backend-builder /app/packages/backend/dist ./packages/backend/dist
@@ -54,9 +50,9 @@ COPY --from=frontend-builder /app/packages/frontend/dist ./packages/backend/publ
 
 WORKDIR /app/packages/backend
 
-# Generate Prisma client for the current platform
-RUN npx prisma generate
-RUN node -e "require('better-sqlite3')"
+# Generate Prisma client + download the correct query-engine binary for this
+# platform. DATABASE_URL is only needed for schema validation at generate time.
+RUN DATABASE_URL="file:./dev.db" npx prisma generate
 
 ENV NODE_ENV=production
 
