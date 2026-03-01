@@ -176,9 +176,10 @@ async function sendArticle(
 
   await withChatDeliveryLock(chatId, async () => {
     if (article.imageUrl) {
+      const imageUrl = article.imageUrl;
       try {
         await runWithTelegramRetry('sendPhoto', () =>
-          bot.telegram.sendPhoto(chatId, article.imageUrl, {
+          bot.telegram.sendPhoto(chatId, imageUrl, {
             caption: article.caption,
             parse_mode: 'HTML',
             reply_markup: replyMarkup,

@@ -64,13 +64,14 @@ export function auditLog(event: AuditEvent): void {
  * Helper to extract client IP from Express request
  * Handles X-Forwarded-For header for proxied requests
  */
-export function getClientIP(req: { headers: Record<string, string | undefined> }): string {
+export function getClientIP(req: { headers: Record<string, string | string[] | undefined> }): string {
   const forwarded = req.headers['x-forwarded-for'];
   if (forwarded) {
-    // X-Forwarded-For can contain multiple IPs: client, proxy1, proxy2, ...
-    return forwarded.split(',')[0].trim();
+    const value = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+    return value.split(',')[0].trim();
   }
-  return req.headers['x-real-ip'] || 'unknown';
+  const realIp = req.headers['x-real-ip'];
+  return (Array.isArray(realIp) ? realIp[0] : realIp) ?? 'unknown';
 }
 
 /**
@@ -78,7 +79,7 @@ export function getClientIP(req: { headers: Record<string, string | undefined> }
  */
 export function createAuditEvent(
   eventType: AuditEventType,
-  req: { headers: Record<string, string | undefined> },
+  req: { headers: Record<string, string | string[] | undefined> },
   outcome: AuditEvent['outcome'],
   options?: {
     userId?: string;
@@ -93,7 +94,7 @@ export function createAuditEvent(
     eventType,
     actor: {
       ip: getClientIP(req),
-      userAgent: req.headers['user-agent'],
+      userAgent: [req.headers['user-agent']].flat()[0],
       userId: options?.userId,
     },
     resource: options?.resourceType

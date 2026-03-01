@@ -9,7 +9,7 @@ import { startBot, stopBot, setupChatTracking } from './bot/client';
 import { startScheduler, stopScheduler } from './scheduler';
 import { prisma } from './db/client';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
-import { doubleSubmitCsrf } from 'csrf-csrf';
+import { doubleCsrf } from 'csrf-csrf';
 
 const app = express();
 
@@ -38,14 +38,15 @@ app.use(cookieParser()); // Parse cookies for httpOnly JWT and CSRF
 
 // CSRF protection - must be after cookieParser
 // Uses double-submit cookie pattern (CSRF token in cookie + header)
-app.use(doubleSubmitCsrf({
-  cookie: {
+const { doubleCsrfProtection } = doubleCsrf({
+  getSecret: () => config.TELEGRAM_BOT_TOKEN,
+  cookieOptions: {
     secure: config.NODE_ENV === 'production',
     sameSite: 'strict',
     httpOnly: false, // Must be readable by JavaScript for header extraction
   },
-  validateOrigin: false, // We validate via token, not origin
-}));
+});
+app.use(doubleCsrfProtection);
 
 // Additional security headers
 app.use((req, res, next) => {
