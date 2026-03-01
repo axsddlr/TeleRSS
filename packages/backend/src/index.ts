@@ -9,6 +9,7 @@ import { startBot, stopBot, setupChatTracking } from './bot/client';
 import { startScheduler, stopScheduler } from './scheduler';
 import { prisma } from './db/client';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import { doubleSubmitCsrf } from 'csrf-csrf';
 
 const app = express();
 
@@ -30,9 +31,21 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false, // Disabled for SPA compatibility
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser()); // Parse cookies for httpOnly JWT
+// Request size limits - prevent DoS via large payloads
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(cookieParser()); // Parse cookies for httpOnly JWT and CSRF
+
+// CSRF protection - must be after cookieParser
+// Uses double-submit cookie pattern (CSRF token in cookie + header)
+app.use(doubleSubmitCsrf({
+  cookie: {
+    secure: config.NODE_ENV === 'production',
+    sameSite: 'strict',
+    httpOnly: false, // Must be readable by JavaScript for header extraction
+  },
+  validateOrigin: false, // We validate via token, not origin
+}));
 
 // Additional security headers
 app.use((req, res, next) => {

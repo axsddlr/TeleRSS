@@ -70,11 +70,25 @@ export const authStorage = {
   isAuthenticated: () => sessionStorage.getItem(TOKEN_KEY) !== null,
 };
 
+/**
+ * Get CSRF token from cookie (set by server via csrf-csrf middleware)
+ */
+function getCsrfToken(): string | null {
+  const match = document.cookie.match(/(?:^|; )_csrf=(?:[^;]+)/);
+  if (match) {
+    return match[0].split('=')[1];
+  }
+  return null;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const csrfToken = getCsrfToken();
+  
   // Cookies are sent automatically by the browser
   const res = await fetch(`/api${path}`, {
     headers: {
       'Content-Type': 'application/json',
+      ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
       ...options?.headers,
     },
     credentials: 'same-origin', // Include cookies for same-origin requests
