@@ -65,12 +65,14 @@ export function formatArticleMessage(article: ArticleData): FormattedArticle {
     : `<i>${date}</i>`;
 
   // Full message (for text-only send, link preview will supply the image)
+  // Title is plain text (not hyperlinked) since "Read more" button provides the link
   const descFull = plainDesc ? `\n\n${escapeHtml(truncate(plainDesc, 300))}` : '';
-  const text = `${header}\n<b><a href="${link}">${title}</a></b>${descFull}\n\n${footer}`;
+  const text = `${header}\n<b>${title}</b>${descFull}\n\n${footer}`;
 
   // Caption (for sendPhoto — max 1024 chars, keep it tight)
+  // Title is plain text (not hyperlinked) since inline keyboard provides the link
   const descCaption = plainDesc ? `\n\n${escapeHtml(truncate(plainDesc, 180))}` : '';
-  const captionRaw = `${header}\n<b><a href="${link}">${title}</a></b>${descCaption}\n\n${footer}`;
+  const captionRaw = `${header}\n<b>${title}</b>${descCaption}\n\n${footer}`;
   // Trim caption to Telegram's 1024-char limit
   const caption =
     captionRaw.length <= 1024 ? captionRaw : captionRaw.slice(0, 1020).trimEnd() + '…';
