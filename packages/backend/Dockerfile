@@ -31,8 +31,7 @@ WORKDIR /app
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY packages/backend/package.json ./packages/backend/
 
-RUN pnpm install --frozen-lockfile --filter backend \
-  && pnpm --filter backend rebuild better-sqlite3
+RUN pnpm install --frozen-lockfile --filter backend
 
 COPY --from=backend-builder /app/packages/backend/dist ./packages/backend/dist
 COPY --from=backend-builder /app/packages/backend/prisma ./packages/backend/prisma
