@@ -40,8 +40,9 @@ app.use(cookieParser()); // Parse cookies for httpOnly JWT and CSRF
 // Uses double-submit cookie pattern (CSRF token in cookie + header)
 const { doubleCsrfProtection } = doubleCsrf({
   getSecret: () => config.TELEGRAM_BOT_TOKEN,
+  cookieName: '_csrf', // Must match getCsrfToken() in frontend api.ts
   cookieOptions: {
-    secure: config.NODE_ENV === 'production',
+    secure: false, // Allow HTTP access (e.g. Portainer without an HTTPS proxy)
     sameSite: 'strict',
     httpOnly: false, // Must be readable by JavaScript for header extraction
   },
@@ -98,8 +99,11 @@ if (config.NODE_ENV === 'production') {
   const frontendDist = path.join(__dirname, '..', 'public');
   app.use(express.static(frontendDist));
 
-  // SPA fallback - use 404 handler instead of serving index.html for unknown API routes
-  app.use(notFoundHandler);
+  // SPA fallback — serve index.html for all non-API routes so BrowserRouter
+  // can handle client-side navigation (e.g. /login, /settings on full reload)
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
 }
 
 // Global error handler - must be last
