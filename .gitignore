@@ -1,10 +1,19 @@
 node_modules/
 dist/
 .env
+.env.local
+.env.*.local
 *.db
 *.sqlite
 data/
-# keep migrations tracked
+# Keep migrations tracked
+packages/backend/.env
+packages/frontend/.env
 packages/frontend/dist/
 .DS_Store
 .claude/settings.local.json
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
