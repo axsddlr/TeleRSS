@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { getSecrets, isPasswordFromEnv, updatePassword, verifyPassword } from '../auth/secrets';
 import { auditLog, createAuditEvent, getClientIP } from '../audit/logger';
+import { bruteForceProtection, recordFailedAttempt, clearFailedAttempts } from '../middleware/bruteForce';
 
 export const authRouter: IRouter = Router();
 
@@ -44,7 +45,7 @@ interface CookieSerializeOptions {
   path: string;
 }
 
-authRouter.post('/login', loginLimiter, (req: Request, res: Response) => {
+authRouter.post('/login', loginLimiter, bruteForceProtection, (req: Request, res: Response) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Password is required' });
@@ -53,16 +54,29 @@ authRouter.post('/login', loginLimiter, (req: Request, res: Response) => {
 
   const { adminPasswordHash, jwtSecret } = getSecrets();
   if (!verifyPassword(parsed.data.password, adminPasswordHash)) {
+    // Record failed attempt with exponential backoff
+    const { delayMs, attempts } = recordFailedAttempt(req);
+    
     // Audit log failed login attempt
     auditLog(createAuditEvent(
       'auth.login.failure',
       req,
       'failure',
-      { resourceType: 'auth', details: { reason: 'invalid_password' } }
+      { 
+        resourceType: 'auth', 
+        details: { 
+          reason: 'invalid_password',
+          attemptNumber: attempts,
+          delayApplied: delayMs > 0,
+        } 
+      }
     ));
     res.status(401).json({ error: 'Invalid password' });
     return;
   }
+
+  // Clear failed attempts on successful login
+  clearFailedAttempts(req);
 
   // Audit log successful login
   auditLog(createAuditEvent(
