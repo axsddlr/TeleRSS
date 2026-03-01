@@ -4,6 +4,7 @@ import { prisma } from '../db/client';
 import { parseFeed } from '../rss/parser';
 import { checkFeed } from '../rss/fetcher';
 import { scheduleFeed, unscheduleFeed } from '../scheduler';
+import { auditLog, createAuditEvent } from '../audit/logger';
 
 export const feedsRouter: IRouter = Router();
 
@@ -78,6 +79,15 @@ feedsRouter.post('/', async (req: Request, res: Response) => {
     });
 
     scheduleFeed(feed.id, feed.checkInterval);
+    
+    // Audit log feed creation
+    auditLog(createAuditEvent(
+      'feed.create',
+      req,
+      'success',
+      { resourceType: 'feed', resourceId: feed.id, resourceName: feed.name }
+    ));
+    
     res.status(201).json(feed);
   } catch (err: unknown) {
     if (err instanceof Error && err.message.includes('Unique constraint')) {
@@ -176,8 +186,19 @@ feedsRouter.put('/:id', async (req: Request, res: Response) => {
 feedsRouter.delete('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
+    // Get feed info before deletion for audit log
+    const feed = await prisma.feed.findUnique({ where: { id } });
     unscheduleFeed(id);
     await prisma.feed.delete({ where: { id } });
+    
+    // Audit log feed deletion
+    auditLog(createAuditEvent(
+      'feed.delete',
+      req,
+      'success',
+      { resourceType: 'feed', resourceId: id, resourceName: feed?.name }
+    ));
+    
     res.status(204).send();
   } catch (err: unknown) {
     if (err instanceof Error && err.message.includes('Record to delete does not exist')) {
@@ -197,6 +218,14 @@ feedsRouter.post('/:id/refresh', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Feed not found' });
       return;
     }
+
+    // Audit log feed refresh
+    auditLog(createAuditEvent(
+      'feed.refresh',
+      req,
+      'success',
+      { resourceType: 'feed', resourceId: id, resourceName: feed.name }
+    ));
 
     // Run check in background
     checkFeed(id).catch((err) => console.error('Refresh error:', err));
