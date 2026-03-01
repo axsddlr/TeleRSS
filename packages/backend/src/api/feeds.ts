@@ -8,26 +8,100 @@ import { auditLog, createAuditEvent } from '../audit/logger';
 
 export const feedsRouter: IRouter = Router();
 
+// Maximum lengths for input validation
+const MAX_URL_LENGTH = 2048;
+const MAX_NAME_LENGTH = 100;
+const MAX_CHECK_INTERVAL = 1440; // 24 hours in minutes
+const MIN_CHECK_INTERVAL = 1;
+
+// URL protocol allowlist for RSS feeds
+const ALLOWED_PROTOCOLS = ['http:', 'https:'];
+
 const createFeedSchema = z.object({
-  url: z.string().url('Invalid feed URL'),
-  name: z.string().min(1, 'Name is required').max(100),
-  checkInterval: z.number().int().min(1).max(1440).default(15),
+  url: z.string()
+    .min(1, 'URL is required')
+    .max(MAX_URL_LENGTH, `URL must be less than ${MAX_URL_LENGTH} characters`)
+    .url('Invalid feed URL')
+    .refine(
+      (url) => {
+        try {
+          const parsed = new URL(url);
+          return ALLOWED_PROTOCOLS.includes(parsed.protocol);
+        } catch {
+          return false;
+        }
+      },
+      { message: 'Only HTTP and HTTPS URLs are allowed' }
+    ),
+  name: z.string()
+    .min(1, 'Name is required')
+    .max(MAX_NAME_LENGTH, `Name must be less than ${MAX_NAME_LENGTH} characters`)
+    .trim(),
+  checkInterval: z.number()
+    .int()
+    .min(MIN_CHECK_INTERVAL, `Check interval must be at least ${MIN_CHECK_INTERVAL} minute`)
+    .max(MAX_CHECK_INTERVAL, `Check interval must be at most ${MAX_CHECK_INTERVAL} minutes`)
+    .default(15),
 });
 
 const importFeedsSchema = z.object({
   feeds: z.array(
     z.object({
-      url: z.string().url(),
-      name: z.string().min(1).max(100),
-      checkInterval: z.number().int().min(1).max(1440).optional(),
+      url: z.string()
+        .min(1, 'URL is required')
+        .max(MAX_URL_LENGTH, `URL must be less than ${MAX_URL_LENGTH} characters`)
+        .url('Invalid feed URL')
+        .refine(
+          (url) => {
+            try {
+              const parsed = new URL(url);
+              return ALLOWED_PROTOCOLS.includes(parsed.protocol);
+            } catch {
+              return false;
+            }
+          },
+          { message: 'Only HTTP and HTTPS URLs are allowed' }
+        ),
+      name: z.string()
+        .min(1, 'Name is required')
+        .max(MAX_NAME_LENGTH, `Name must be less than ${MAX_NAME_LENGTH} characters`)
+        .trim(),
+      checkInterval: z.number()
+        .int()
+        .min(MIN_CHECK_INTERVAL, `Check interval must be at least ${MIN_CHECK_INTERVAL} minute`)
+        .max(MAX_CHECK_INTERVAL, `Check interval must be at most ${MAX_CHECK_INTERVAL} minutes`)
+        .optional(),
     })
-  ).min(1),
+  ).min(1, 'At least one feed is required'),
 });
 
 const updateFeedSchema = z.object({
-  url: z.string().url().optional(),
-  name: z.string().min(1).max(100).optional(),
-  checkInterval: z.number().int().min(1).max(1440).optional(),
+  url: z.string()
+    .min(1, 'URL cannot be empty')
+    .max(MAX_URL_LENGTH, `URL must be less than ${MAX_URL_LENGTH} characters`)
+    .url('Invalid feed URL')
+    .refine(
+      (url) => {
+        try {
+          const parsed = new URL(url);
+          return ALLOWED_PROTOCOLS.includes(parsed.protocol);
+        } catch {
+          return false;
+        }
+      },
+      { message: 'Only HTTP and HTTPS URLs are allowed' }
+    )
+    .optional(),
+  name: z.string()
+    .min(1, 'Name cannot be empty')
+    .max(MAX_NAME_LENGTH, `Name must be less than ${MAX_NAME_LENGTH} characters`)
+    .trim()
+    .optional(),
+  checkInterval: z.number()
+    .int()
+    .min(MIN_CHECK_INTERVAL, `Check interval must be at least ${MIN_CHECK_INTERVAL} minute`)
+    .max(MAX_CHECK_INTERVAL, `Check interval must be at most ${MAX_CHECK_INTERVAL} minutes`)
+    .optional(),
   active: z.boolean().optional(),
 });
 

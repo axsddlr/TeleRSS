@@ -9,16 +9,34 @@ import {
 
 export const subscriptionsRouter: IRouter = Router();
 
+// Maximum lengths for input validation
+const MAX_CHAT_NAME_LENGTH = 256;
+const MAX_FEED_IDS_BULK = 50;
+
 const createSubSchema = z.object({
-  feedId: z.string().min(1),
-  chatId: z.string().min(1, 'Chat ID is required'),
-  chatName: z.string().optional(),
+  feedId: z.string()
+    .min(1, 'Feed ID is required')
+    .max(64, 'Invalid feed ID'),
+  chatId: z.string()
+    .min(1, 'Chat ID is required')
+    .max(64, 'Invalid chat ID'),
+  chatName: z.string()
+    .max(MAX_CHAT_NAME_LENGTH, `Chat name must be less than ${MAX_CHAT_NAME_LENGTH} characters`)
+    .optional()
+    .transform((val) => val?.trim() || undefined),
 });
 
 const bulkCreateSubSchema = z.object({
-  feedIds: z.array(z.string().min(1)).min(1),
-  chatId: z.string().min(1, 'Chat ID is required'),
-  chatName: z.string().optional(),
+  feedIds: z.array(z.string().min(1, 'Feed ID cannot be empty').max(64, 'Invalid feed ID'))
+    .min(1, 'At least one feed ID is required')
+    .max(MAX_FEED_IDS_BULK, `Maximum ${MAX_FEED_IDS_BULK} feeds per bulk operation`),
+  chatId: z.string()
+    .min(1, 'Chat ID is required')
+    .max(64, 'Invalid chat ID'),
+  chatName: z.string()
+    .max(MAX_CHAT_NAME_LENGTH, `Chat name must be less than ${MAX_CHAT_NAME_LENGTH} characters`)
+    .optional()
+    .transform((val) => val?.trim() || undefined),
 });
 
 // GET /api/subscriptions
