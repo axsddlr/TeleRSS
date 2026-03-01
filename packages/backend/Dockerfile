@@ -1,5 +1,5 @@
 FROM node:22-bookworm-slim AS base
-ARG PNPM_VERSION=9.12.2
+ARG PNPM_VERSION=10.30.3
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
