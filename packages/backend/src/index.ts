@@ -54,6 +54,41 @@ app.use((req, res, next) => {
   next();
 });
 
+// Health check endpoint (no auth required, for monitoring)
+app.get('/health', async (req, res) => {
+  const health = {
+    status: 'ok' as 'ok' | 'degraded' | 'unhealthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    checks: {
+      database: false,
+      bot: false,
+    },
+  };
+
+  // Check database connectivity
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    health.checks.database = true;
+  } catch {
+    health.status = 'degraded';
+  }
+
+  // Check bot status
+  try {
+    const botStatus = await import('./bot/client').then(m => m.getBotStatus());
+    health.checks.bot = botStatus.connected || botStatus.started;
+    if (!health.checks.bot) {
+      health.status = 'degraded';
+    }
+  } catch {
+    health.status = 'degraded';
+  }
+
+  const statusCode = health.status === 'ok' ? 200 : 503;
+  res.status(statusCode).json(health);
+});
+
 // API routes
 app.use('/api', apiRouter);
 
