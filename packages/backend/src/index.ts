@@ -8,6 +8,7 @@ import { apiRouter } from './api/router';
 import { startBot, stopBot, setupChatTracking } from './bot/client';
 import { startScheduler, stopScheduler } from './scheduler';
 import { prisma } from './db/client';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 const app = express();
 
@@ -48,11 +49,12 @@ if (config.NODE_ENV === 'production') {
   const frontendDist = path.join(__dirname, '..', 'public');
   app.use(express.static(frontendDist));
 
-  // SPA fallback
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(frontendDist, 'index.html'));
-  });
+  // SPA fallback - use 404 handler instead of serving index.html for unknown API routes
+  app.use(notFoundHandler);
 }
+
+// Global error handler - must be last
+app.use(errorHandler);
 
 async function main() {
   // Resolve auth credentials before anything else
