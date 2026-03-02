@@ -57,6 +57,7 @@ export interface ActivityItem {
 }
 
 const TOKEN_KEY = 'auth_token';
+let csrfTokenCache: string | null = null;
 
 // Auth storage now uses sessionStorage for login state tracking only
 // Actual JWT is stored in httpOnly cookie by the server
@@ -70,30 +71,56 @@ export const authStorage = {
   isAuthenticated: () => sessionStorage.getItem(TOKEN_KEY) !== null,
 };
 
-/**
- * Get CSRF token from cookie (set by server via csrf-csrf middleware)
- */
-function getCsrfToken(): string | null {
-  const match = document.cookie.match(/(?:^|; )_csrf=(?:[^;]+)/);
-  if (match) {
-    return match[0].split('=')[1];
-  }
-  return null;
+function isUnsafeMethod(method: string): boolean {
+  return !['GET', 'HEAD', 'OPTIONS'].includes(method);
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const csrfToken = getCsrfToken();
-  
+async function fetchCsrfToken(forceRefresh = false): Promise<string> {
+  if (!forceRefresh && csrfTokenCache) {
+    return csrfTokenCache;
+  }
+
+  const res = await fetch('/api/auth/csrf-token', {
+    credentials: 'same-origin',
+  });
+
+  if (!res.ok) {
+    throw new Error('Failed to initialize security token');
+  }
+
+  const body = await res.json().catch(() => ({}));
+  if (typeof body.csrfToken !== 'string' || body.csrfToken.length === 0) {
+    throw new Error('Failed to initialize security token');
+  }
+
+  const csrfToken = body.csrfToken;
+  csrfTokenCache = csrfToken;
+  return csrfToken;
+}
+
+async function request<T>(path: string, options?: RequestInit, retry = true): Promise<T> {
+  const method = options?.method?.toUpperCase() ?? 'GET';
+  const headers = new Headers(options?.headers);
+  headers.set('Content-Type', 'application/json');
+
+  if (isUnsafeMethod(method)) {
+    headers.set('X-CSRF-Token', await fetchCsrfToken());
+  }
+
   // Cookies are sent automatically by the browser
   const res = await fetch(`/api${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
-      ...options?.headers,
-    },
-    credentials: 'same-origin', // Include cookies for same-origin requests
     ...options,
+    headers,
+    credentials: 'same-origin',
   });
+
+  if (res.status === 403 && isUnsafeMethod(method) && retry) {
+    const body = await res.json().catch(() => ({}));
+    if (body.error === 'invalid csrf token') {
+      csrfTokenCache = null;
+      return request<T>(path, options, false);
+    }
+  }
 
   if (res.status === 401) {
     authStorage.clearToken();

@@ -39,15 +39,21 @@ app.use(cookieParser()); // Parse cookies for httpOnly JWT and CSRF
 
 // CSRF protection - must be after cookieParser
 // Uses double-submit cookie pattern (CSRF token in cookie + header)
-const { doubleCsrfProtection } = doubleCsrf({
+const { generateToken, doubleCsrfProtection } = doubleCsrf({
   getSecret: () => config.TELEGRAM_BOT_TOKEN,
-  cookieName: '_csrf', // Must match getCsrfToken() in frontend api.ts
+  cookieName: '_csrf',
   cookieOptions: {
     secure: false, // Allow HTTP access (e.g. Portainer without an HTTPS proxy)
     sameSite: 'strict',
-    httpOnly: false, // Must be readable by JavaScript for header extraction
+    httpOnly: true,
   },
 });
+
+app.get('/api/auth/csrf-token', (req, res) => {
+  const csrfToken = generateToken(req, res, false, false);
+  res.json({ csrfToken });
+});
+
 app.use(doubleCsrfProtection);
 
 // Additional security headers
