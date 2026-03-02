@@ -75,6 +75,24 @@ function isUnsafeMethod(method: string): boolean {
   return !['GET', 'HEAD', 'OPTIONS'].includes(method);
 }
 
+function getErrorMessage(error: unknown, status: number): string {
+  if (typeof error === 'string' && error) {
+    return error;
+  }
+
+  if (error && typeof error === 'object') {
+    const fieldErrors = Object.values(error as Record<string, unknown>)
+      .flatMap((value) => Array.isArray(value) ? value : [])
+      .filter((value): value is string => typeof value === 'string' && value.length > 0);
+
+    if (fieldErrors.length > 0) {
+      return fieldErrors[0];
+    }
+  }
+
+  return `HTTP ${status}`;
+}
+
 async function fetchCsrfToken(forceRefresh = false): Promise<string> {
   if (!forceRefresh && csrfTokenCache) {
     return csrfTokenCache;
@@ -130,7 +148,7 @@ async function request<T>(path: string, options?: RequestInit, retry = true): Pr
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
+    throw new Error(getErrorMessage(body.error, res.status));
   }
 
   if (res.status === 204) return undefined as T;

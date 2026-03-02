@@ -105,6 +105,35 @@ const updateFeedSchema = z.object({
   active: z.boolean().optional(),
 });
 
+async function getValidatedFeedDescription(url: string): Promise<string | undefined> {
+  const feedData = await parseFeed(url);
+  return feedData.description;
+}
+
+function getFeedValidationMessage(err: unknown): string {
+  if (err instanceof Error) {
+    if (err.message.includes('Unique constraint')) {
+      return 'A feed with this URL already exists';
+    }
+
+    if (
+      err.message.includes('internal or private network') ||
+      err.message.includes('local network host') ||
+      err.message.includes('embedded credentials') ||
+      err.message.includes('Could not resolve feed host') ||
+      err.message.includes('Invalid content type') ||
+      err.message.includes('Request timed out') ||
+      err.message.includes('Too many redirects') ||
+      err.message.includes('Only HTTP and HTTPS') ||
+      err.message.includes('Feed response exceeds')
+    ) {
+      return err.message;
+    }
+  }
+
+  return 'Could not fetch, validate, or parse the RSS feed at that URL';
+}
+
 // GET /api/feeds
 feedsRouter.get('/', async (_req: Request, res: Response) => {
   try {
@@ -133,16 +162,9 @@ feedsRouter.post('/', async (req: Request, res: Response) => {
   const { url, name, checkInterval } = parsed.data;
 
   // Validate the feed URL by parsing it
-  let feedDescription: string | undefined;
   try {
-    const feedData = await parseFeed(url);
-    feedDescription = feedData.description;
-  } catch {
-    res.status(400).json({ error: 'Could not fetch or parse RSS feed at that URL' });
-    return;
-  }
+    const feedDescription = await getValidatedFeedDescription(url);
 
-  try {
     const feed = await prisma.feed.create({
       data: {
         url,
@@ -164,11 +186,12 @@ feedsRouter.post('/', async (req: Request, res: Response) => {
     
     res.status(201).json(feed);
   } catch (err: unknown) {
-    if (err instanceof Error && err.message.includes('Unique constraint')) {
-      res.status(409).json({ error: 'A feed with this URL already exists' });
+    const message = getFeedValidationMessage(err);
+    if (message === 'A feed with this URL already exists') {
+      res.status(409).json({ error: message });
       return;
     }
-    res.status(500).json({ error: 'Failed to create feed' });
+    res.status(400).json({ error: message });
   }
 });
 
@@ -185,8 +208,8 @@ feedsRouter.post('/import', async (req: Request, res: Response) => {
   // Validate all feeds in parallel
   const validationResults = await Promise.allSettled(
     feeds.map(async (f) => {
-      const feedData = await parseFeed(f.url);
-      return { ...f, description: feedData.description };
+      const description = await getValidatedFeedDescription(f.url);
+      return { ...f, description };
     })
   );
 
@@ -198,7 +221,7 @@ feedsRouter.post('/import', async (req: Request, res: Response) => {
     validationResults.map(async (result, i) => {
       const input = feeds[i];
       if (result.status === 'rejected') {
-        failed.push({ url: input.url, reason: 'Could not fetch or parse feed' });
+        failed.push({ url: input.url, reason: getFeedValidationMessage(result.reason) });
         return;
       }
 
@@ -213,7 +236,7 @@ feedsRouter.post('/import', async (req: Request, res: Response) => {
         if (err instanceof Error && err.message.includes('Unique constraint')) {
           skipped.push({ url, reason: 'duplicate' });
         } else {
-          failed.push({ url, reason: 'Database error' });
+          failed.push({ url, reason: getFeedValidationMessage(err) });
         }
       }
     })
@@ -232,13 +255,18 @@ feedsRouter.put('/:id', async (req: Request, res: Response) => {
   }
 
   try {
+    const updateData = { ...parsed.data } as typeof parsed.data & { description?: string };
+    if (updateData.url) {
+      updateData.description = await getValidatedFeedDescription(updateData.url);
+    }
+
     const feed = await prisma.feed.update({
       where: { id },
-      data: parsed.data,
+      data: updateData,
     });
 
     // Reschedule if interval or active state changed
-    if (parsed.data.checkInterval !== undefined || parsed.data.active !== undefined) {
+    if (updateData.checkInterval !== undefined || updateData.active !== undefined) {
       if (feed.active) {
         scheduleFeed(feed.id, feed.checkInterval);
       } else {
@@ -248,6 +276,16 @@ feedsRouter.put('/:id', async (req: Request, res: Response) => {
 
     res.json(feed);
   } catch (err: unknown) {
+    const message = getFeedValidationMessage(err);
+    if (message !== 'Could not fetch, validate, or parse the RSS feed at that URL') {
+      if (message === 'A feed with this URL already exists') {
+        res.status(409).json({ error: message });
+        return;
+      }
+      res.status(400).json({ error: message });
+      return;
+    }
+
     if (err instanceof Error && err.message.includes('Record to update not found')) {
       res.status(404).json({ error: 'Feed not found' });
       return;

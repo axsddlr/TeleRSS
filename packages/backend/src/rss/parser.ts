@@ -1,6 +1,8 @@
 import Parser from 'rss-parser';
 import https from 'https';
 import http from 'http';
+import { lookup } from 'dns/promises';
+import { isIP } from 'net';
 import ipaddr from 'ipaddr.js';
 import { URL } from 'url';
 
@@ -46,6 +48,11 @@ const ALLOWED_CONTENT_TYPES = [
   'text/plain',
   'application/xml',
 ];
+const MAX_FEED_BYTES = 2 * 1024 * 1024;
+const BLOCKED_HOSTNAMES = new Set([
+  'localhost',
+  'localhost.localdomain',
+]);
 
 /**
  * Check if an IP address is safe to connect to (blocks private/internal IPs)
@@ -53,6 +60,10 @@ const ALLOWED_CONTENT_TYPES = [
 function isSafeIP(ip: string): boolean {
   try {
     const addr = ipaddr.parse(ip);
+    if (addr.kind() === 'ipv6' && addr.isIPv4MappedAddress()) {
+      return isSafeIP(addr.toIPv4Address().toString());
+    }
+
     // Only allow unicast addresses (public IPs)
     return addr.range() === 'unicast';
   } catch {
@@ -63,19 +74,42 @@ function isSafeIP(ip: string): boolean {
 /**
  * Validate that a URL does not point to internal/private resources
  */
-function validateUrlSafety(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    const hostname = parsed.hostname;
+async function validateUrlSafety(url: string): Promise<void> {
+  const parsed = new URL(url);
 
-    // Skip validation for non-IP hostnames (they'll be resolved later)
-    if (!ipaddr.isValid(hostname)) {
-      return true;
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Only HTTP and HTTPS feed URLs are allowed');
+  }
+
+  if (parsed.username || parsed.password) {
+    throw new Error('Feed URLs with embedded credentials are not allowed');
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    BLOCKED_HOSTNAMES.has(hostname) ||
+    hostname.endsWith('.localhost') ||
+    hostname.endsWith('.local')
+  ) {
+    throw new Error('Feed URL points to a local network host');
+  }
+
+  if (isIP(hostname)) {
+    if (!isSafeIP(hostname)) {
+      throw new Error('Feed URL points to an internal or private network');
     }
+    return;
+  }
 
-    return isSafeIP(hostname);
-  } catch {
-    return false;
+  const resolved = await lookup(hostname, { all: true, verbatim: true });
+  if (resolved.length === 0) {
+    throw new Error('Could not resolve feed host');
+  }
+
+  for (const { address } of resolved) {
+    if (!isSafeIP(address)) {
+      throw new Error('Feed URL points to an internal or private network');
+    }
   }
 }
 
@@ -89,25 +123,40 @@ class FetchHttpError extends Error {
   }
 }
 
-function fetchUrl(url: string, redirectsLeft = 5): Promise<string> {
-  return new Promise((resolve, reject) => {
-    // Validate URL safety on initial request and each redirect
-    if (!validateUrlSafety(url)) {
-      reject(new Error('URL points to internal/private network'));
-      return;
-    }
+async function fetchUrl(url: string, redirectsLeft = 5): Promise<string> {
+  await validateUrlSafety(url);
 
+  return new Promise((resolve, reject) => {
     const parsed = new URL(url);
     const lib = parsed.protocol === 'https:' ? https : http;
 
+    let settled = false;
+    const fail = (err: Error) => {
+      if (!settled) {
+        settled = true;
+        reject(err);
+      }
+    };
+    const succeed = (value: string) => {
+      if (!settled) {
+        settled = true;
+        resolve(value);
+      }
+    };
+
     const req = lib.get(
-      { hostname: parsed.hostname, path: parsed.pathname + parsed.search, headers: HEADERS },
+      {
+        hostname: parsed.hostname,
+        port: parsed.port || undefined,
+        path: parsed.pathname + parsed.search,
+        headers: HEADERS,
+      },
       (res) => {
-        // Validate Content-Type to prevent XML injection attacks
         const contentType = res.headers['content-type']?.toLowerCase() ?? '';
         const isAllowedType = ALLOWED_CONTENT_TYPES.some(type => contentType.includes(type));
         if (!isAllowedType && res.statusCode === 200) {
-          reject(new Error(`Invalid content type: ${contentType}`));
+          res.resume();
+          fail(new Error(`Invalid content type: ${contentType}`));
           return;
         }
 
@@ -118,11 +167,13 @@ function fetchUrl(url: string, redirectsLeft = 5): Promise<string> {
           res.headers.location
         ) {
           if (redirectsLeft === 0) {
-            reject(new Error('Too many redirects'));
+            res.resume();
+            fail(new Error('Too many redirects'));
             return;
           }
           const next = new URL(res.headers.location, url).toString();
-          resolve(fetchUrl(next, redirectsLeft - 1));
+          res.resume();
+          fetchUrl(next, redirectsLeft - 1).then(succeed).catch(fail);
           return;
         }
 
@@ -133,21 +184,32 @@ function fetchUrl(url: string, redirectsLeft = 5): Promise<string> {
             const seconds = parseInt(retryAfter, 10);
             retryAfterMs = isNaN(seconds) ? undefined : seconds * 1000;
           }
-          reject(new FetchHttpError(res.statusCode, retryAfterMs));
+          res.resume();
+          fail(new FetchHttpError(res.statusCode, retryAfterMs));
           return;
         }
 
         const chunks: Buffer[] = [];
-        res.on('data', (chunk) => chunks.push(chunk));
-        res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
-        res.on('error', reject);
+        let totalBytes = 0;
+
+        res.on('data', (chunk: Buffer | string) => {
+          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          totalBytes += buffer.length;
+          if (totalBytes > MAX_FEED_BYTES) {
+            res.destroy(new Error(`Feed response exceeds ${MAX_FEED_BYTES} bytes`));
+            return;
+          }
+          chunks.push(buffer);
+        });
+        res.on('end', () => succeed(Buffer.concat(chunks).toString('utf-8')));
+        res.on('error', (err) => fail(err instanceof Error ? err : new Error(String(err))));
       }
     );
 
     req.setTimeout(10000, () => {
       req.destroy(new Error('Request timed out'));
     });
-    req.on('error', reject);
+    req.on('error', (err) => fail(err instanceof Error ? err : new Error(String(err))));
   });
 }
 
