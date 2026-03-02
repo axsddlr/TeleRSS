@@ -79,6 +79,16 @@ function validateUrlSafety(url: string): boolean {
   }
 }
 
+class FetchHttpError extends Error {
+  constructor(
+    public readonly statusCode: number,
+    public readonly retryAfterMs?: number,
+  ) {
+    super(`HTTP ${statusCode} fetching feed`);
+    this.name = 'FetchHttpError';
+  }
+}
+
 function fetchUrl(url: string, redirectsLeft = 5): Promise<string> {
   return new Promise((resolve, reject) => {
     // Validate URL safety on initial request and each redirect
@@ -117,7 +127,13 @@ function fetchUrl(url: string, redirectsLeft = 5): Promise<string> {
         }
 
         if (res.statusCode && res.statusCode >= 400) {
-          reject(new Error(`HTTP ${res.statusCode} fetching feed`));
+          let retryAfterMs: number | undefined;
+          const retryAfter = res.headers['retry-after'];
+          if (retryAfter) {
+            const seconds = parseInt(retryAfter, 10);
+            retryAfterMs = isNaN(seconds) ? undefined : seconds * 1000;
+          }
+          reject(new FetchHttpError(res.statusCode, retryAfterMs));
           return;
         }
 
@@ -133,6 +149,35 @@ function fetchUrl(url: string, redirectsLeft = 5): Promise<string> {
     });
     req.on('error', reject);
   });
+}
+
+async function fetchUrlWithRetry(url: string): Promise<string> {
+  const MAX_ATTEMPTS = 3;
+  const BASE_DELAY_MS = 5000;
+  const MAX_DELAY_MS = 60000;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      return await fetchUrl(url);
+    } catch (err) {
+      const isRetryable =
+        err instanceof FetchHttpError &&
+        (err.statusCode === 429 || err.statusCode === 503);
+
+      if (!isRetryable || attempt === MAX_ATTEMPTS) {
+        throw err;
+      }
+
+      const backoff = Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), MAX_DELAY_MS);
+      const delayMs = (err as FetchHttpError).retryAfterMs ?? backoff;
+      console.warn(
+        `Feed fetch got ${(err as FetchHttpError).statusCode} (attempt ${attempt}/${MAX_ATTEMPTS}). Retrying in ${delayMs}ms…`,
+      );
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  // Unreachable, but satisfies TypeScript
+  throw new Error('fetchUrlWithRetry exhausted attempts');
 }
 
 function safeUrl(url: string | undefined): string | undefined {
@@ -180,7 +225,7 @@ function extractImageUrl(item: any): string | undefined {
 }
 
 export async function parseFeed(url: string): Promise<ParsedFeed> {
-  const xml = await fetchUrl(url);
+  const xml = await fetchUrlWithRetry(url);
   const feed = await xmlParser.parseString(xml);
 
   const items: ParsedItem[] = (feed.items || []).map((item) => {

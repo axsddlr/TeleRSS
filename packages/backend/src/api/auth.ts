@@ -31,7 +31,7 @@ const loginSchema = z.object({ password: z.string().min(1) });
 // Cookie configuration for secure JWT storage
 const COOKIE_OPTIONS: CookieSerializeOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+  secure: false, // Allow HTTP deployments (no HTTPS proxy). Mirrors CSRF cookie.
   sameSite: 'strict',
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   path: '/',
