@@ -241,20 +241,26 @@ export async function checkFeed(feedId: string): Promise<void> {
     return aTime - bTime;
   });
 
+  // Batch lookup: fetch all already-delivered GUIDs in a single query
+  const itemGuids = itemsToSend.filter((i) => i.guid).map((i) => i.guid);
+  const deliveredGuids = new Set(
+    itemGuids.length > 0
+      ? (
+          await prisma.deliveredItem.findMany({
+            where: { feedId, articleGuid: { in: itemGuids } },
+            select: { articleGuid: true },
+          })
+        ).map((d) => d.articleGuid)
+      : [],
+  );
+
+  // Per-run cache for resolved topic thread IDs so we only resolve once per subscription
+  const resolvedThreadIds = new Map<string, number | null>();
+
   for (const item of itemsToSend) {
     if (!item.guid) continue;
 
-    // Check if already delivered
-    const existing = await prisma.deliveredItem.findUnique({
-      where: {
-        feedId_articleGuid: {
-          feedId,
-          articleGuid: item.guid,
-        },
-      },
-    });
-
-    if (existing) continue;
+    if (deliveredGuids.has(item.guid)) continue;
     let sentToAnySubscription = false;
 
     // Send to all active subscriptions
@@ -270,16 +276,20 @@ export async function checkFeed(feedId: string): Promise<void> {
       });
 
       for (const sub of feed.subscriptions) {
-        let threadId = sub.topicThreadId;
-        if (threadId == null) {
-          threadId = await ensureTopicForSubscription({
-            subscriptionId: sub.id,
-            chatId: sub.chatId,
-            feedName: feed.name,
-            topicName: sub.topicName,
-            topicNameKey: sub.topicNameKey,
-            topicThreadId: sub.topicThreadId,
-          });
+        let threadId = resolvedThreadIds.get(sub.id);
+        if (threadId === undefined) {
+          threadId = sub.topicThreadId;
+          if (threadId == null) {
+            threadId = await ensureTopicForSubscription({
+              subscriptionId: sub.id,
+              chatId: sub.chatId,
+              feedName: feed.name,
+              topicName: sub.topicName,
+              topicNameKey: sub.topicNameKey,
+              topicThreadId: sub.topicThreadId,
+            });
+          }
+          resolvedThreadIds.set(sub.id, threadId);
         }
 
         try {
@@ -297,6 +307,7 @@ export async function checkFeed(feedId: string): Promise<void> {
                 topicThreadId: sub.topicThreadId,
                 forceRecreate: true,
               });
+              resolvedThreadIds.set(sub.id, recreatedThreadId);
 
               if (typeof recreatedThreadId === 'number') {
                 await sendArticle(bot, sub.chatId, formatted, recreatedThreadId);
