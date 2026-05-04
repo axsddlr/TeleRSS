@@ -3,6 +3,7 @@ import { prisma } from '../db/client';
 import { checkFeed } from '../rss/fetcher';
 
 const jobs = new Map<string, cron.ScheduledTask>();
+const running = new Map<string, Promise<void>>();
 
 function intervalToCron(minutes: number): string {
   if (minutes < 1) minutes = 1;
@@ -26,16 +27,22 @@ export async function startScheduler(): Promise<void> {
 }
 
 export function scheduleFeed(feedId: string, intervalMinutes: number): void {
-  // Remove existing job if any
   unscheduleFeed(feedId);
 
   const cronExpr = intervalToCron(intervalMinutes);
   const task = cron.schedule(cronExpr, async () => {
-    try {
-      await checkFeed(feedId);
-    } catch (err) {
-      console.error(`Scheduler error for feed ${feedId}:`, err);
-    }
+    if (running.has(feedId)) return;
+    const promise = (async () => {
+      try {
+        await checkFeed(feedId);
+      } catch (err) {
+        console.error(`Scheduler error for feed ${feedId}:`, err);
+      } finally {
+        running.delete(feedId);
+      }
+    })();
+    running.set(feedId, promise);
+    await promise;
   });
 
   jobs.set(feedId, task);
@@ -47,6 +54,7 @@ export function unscheduleFeed(feedId: string): void {
     existing.stop();
     jobs.delete(feedId);
   }
+  running.delete(feedId);
 }
 
 export function stopScheduler(): void {
@@ -54,5 +62,6 @@ export function stopScheduler(): void {
     task.stop();
     jobs.delete(id);
   }
+  running.clear();
   console.log('Scheduler stopped');
 }
