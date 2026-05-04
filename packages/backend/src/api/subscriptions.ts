@@ -39,10 +39,14 @@ const bulkCreateSubSchema = z.object({
     .transform((val) => val?.trim() || undefined),
 });
 
-// GET /api/subscriptions
-subscriptionsRouter.get('/', async (_req: Request, res: Response) => {
+// GET /api/subscriptions?limit=50&offset=0
+subscriptionsRouter.get('/', async (req: Request, res: Response) => {
   try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : undefined;
     const subs = await prisma.subscription.findMany({
+      ...(typeof limit === 'number' && !isNaN(limit) ? { take: limit } : {}),
+      ...(typeof offset === 'number' && !isNaN(offset) ? { skip: offset } : {}),
       include: { feed: { select: { id: true, name: true, url: true } } },
       orderBy: { createdAt: 'desc' },
     });

@@ -72,7 +72,8 @@ const importFeedsSchema = z.object({
         .max(MAX_CHECK_INTERVAL, `Check interval must be at most ${MAX_CHECK_INTERVAL} minutes`)
         .optional(),
     })
-  ).min(1, 'At least one feed is required'),
+  ).min(1, 'At least one feed is required')
+    .max(100, 'Maximum 100 feeds per import'),
 });
 
 const updateFeedSchema = z.object({
@@ -134,10 +135,14 @@ function getFeedValidationMessage(err: unknown): string {
   return 'Could not fetch, validate, or parse the RSS feed at that URL';
 }
 
-// GET /api/feeds
-feedsRouter.get('/', async (_req: Request, res: Response) => {
+// GET /api/feeds?limit=50&offset=0
+feedsRouter.get('/', async (req: Request, res: Response) => {
   try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : undefined;
     const feeds = await prisma.feed.findMany({
+      ...(typeof limit === 'number' && !isNaN(limit) ? { take: limit } : {}),
+      ...(typeof offset === 'number' && !isNaN(offset) ? { skip: offset } : {}),
       include: {
         _count: {
           select: { subscriptions: { where: { active: true } } },

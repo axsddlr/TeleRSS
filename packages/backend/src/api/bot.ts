@@ -15,12 +15,16 @@ botRouter.get('/status', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /api/bot/chats
+// GET /api/bot/chats?adminOnly=true&limit=50&offset=0
 botRouter.get('/chats', async (req: Request, res: Response) => {
   const adminOnly = req.query.adminOnly === 'true';
   try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : undefined;
     const chats = await prisma.knownChat.findMany({
       where: adminOnly ? { isAdmin: true } : undefined,
+      ...(typeof limit === 'number' && !isNaN(limit) ? { take: limit } : {}),
+      ...(typeof offset === 'number' && !isNaN(offset) ? { skip: offset } : {}),
       orderBy: { chatName: 'asc' },
     });
     res.json(chats);
