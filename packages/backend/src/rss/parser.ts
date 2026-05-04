@@ -1,6 +1,4 @@
 import Parser from 'rss-parser';
-import https from 'https';
-import http from 'http';
 import { lookup } from 'dns/promises';
 import { isIP } from 'net';
 import ipaddr from 'ipaddr.js';
@@ -30,14 +28,6 @@ const xmlParser = new Parser({
     ],
   },
 });
-
-const HEADERS: Record<string, string> = {
-  'User-Agent':
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-  Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*',
-  'Accept-Language': 'en-US,en;q=0.9',
-  'Cache-Control': 'no-cache',
-};
 
 // Allowed MIME types for RSS/Atom feeds
 const ALLOWED_CONTENT_TYPES = [
@@ -123,94 +113,54 @@ class FetchHttpError extends Error {
   }
 }
 
-async function fetchUrl(url: string, redirectsLeft = 5): Promise<string> {
+async function fetchUrl(url: string): Promise<string> {
   await validateUrlSafety(url);
 
-  return new Promise((resolve, reject) => {
-    const parsed = new URL(url);
-    const lib = parsed.protocol === 'https:' ? https : http;
+  const { gotScraping } = await import('got-scraping');
 
-    let settled = false;
-    const fail = (err: Error) => {
-      if (!settled) {
-        settled = true;
-        reject(err);
-      }
-    };
-    const succeed = (value: string) => {
-      if (!settled) {
-        settled = true;
-        resolve(value);
-      }
-    };
-
-    const req = lib.get(
-      {
-        hostname: parsed.hostname,
-        port: parsed.port || undefined,
-        path: parsed.pathname + parsed.search,
-        headers: HEADERS,
+  try {
+    const response = await gotScraping({
+      url,
+      method: 'GET',
+      headers: {
+        Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*',
       },
-      (res) => {
-        const contentType = res.headers['content-type']?.toLowerCase() ?? '';
-        const isAllowedType = ALLOWED_CONTENT_TYPES.some(type => contentType.includes(type));
-        if (!isAllowedType && res.statusCode === 200) {
-          res.resume();
-          fail(new Error(`Invalid content type: ${contentType}`));
-          return;
-        }
-
-        if (
-          res.statusCode &&
-          res.statusCode >= 300 &&
-          res.statusCode < 400 &&
-          res.headers.location
-        ) {
-          if (redirectsLeft === 0) {
-            res.resume();
-            fail(new Error('Too many redirects'));
-            return;
-          }
-          const next = new URL(res.headers.location, url).toString();
-          res.resume();
-          fetchUrl(next, redirectsLeft - 1).then(succeed).catch(fail);
-          return;
-        }
-
-        if (res.statusCode && res.statusCode >= 400) {
-          let retryAfterMs: number | undefined;
-          const retryAfter = res.headers['retry-after'];
-          if (retryAfter) {
-            const seconds = parseInt(retryAfter, 10);
-            retryAfterMs = isNaN(seconds) ? undefined : seconds * 1000;
-          }
-          res.resume();
-          fail(new FetchHttpError(res.statusCode, retryAfterMs));
-          return;
-        }
-
-        const chunks: Buffer[] = [];
-        let totalBytes = 0;
-
-        res.on('data', (chunk: Buffer | string) => {
-          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-          totalBytes += buffer.length;
-          if (totalBytes > MAX_FEED_BYTES) {
-            res.destroy(new Error(`Feed response exceeds ${MAX_FEED_BYTES} bytes`));
-            return;
-          }
-          chunks.push(buffer);
-        });
-        res.on('end', () => succeed(Buffer.concat(chunks).toString('utf-8')));
-        res.on('error', (err) => fail(err instanceof Error ? err : new Error(String(err))));
-      }
-    );
-
-    req.setTimeout(10000, () => {
-      req.destroy(new Error('Request timed out'));
+      responseType: 'text',
+      timeout: { request: 10000 },
+      maxRedirects: 5,
+      http2: true,
     });
-    req.on('error', (err) => fail(err instanceof Error ? err : new Error(String(err))));
-  });
+
+    const contentType = (response.headers['content-type'] as string)?.toLowerCase() ?? '';
+    const isAllowedType = ALLOWED_CONTENT_TYPES.some((type) => contentType.includes(type));
+    if (!isAllowedType) {
+      throw new Error(`Invalid content type: ${contentType}`);
+    }
+
+    const body = response.body;
+    if (body.length > MAX_FEED_BYTES) {
+      throw new Error(`Feed response exceeds ${MAX_FEED_BYTES} bytes`);
+    }
+
+    return body;
+  } catch (err) {
+    if (err && typeof err === 'object' && 'response' in err) {
+      const httpErr = err as {
+        response: { statusCode: number; headers: Record<string, string | string[] | undefined> };
+      };
+      const sc = httpErr.response?.statusCode;
+      if (sc && sc >= 400) {
+        let retryAfterMs: number | undefined;
+        const retryAfter = httpErr.response?.headers?.['retry-after'];
+        if (typeof retryAfter === 'string') {
+          const seconds = parseInt(retryAfter, 10);
+          retryAfterMs = isNaN(seconds) ? undefined : seconds * 1000;
+        }
+        throw new FetchHttpError(sc, retryAfterMs);
+      }
+    }
+    throw err;
+  }
 }
 
 async function fetchUrlWithRetry(url: string): Promise<string> {
