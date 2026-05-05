@@ -1,11 +1,27 @@
 import { Telegraf } from 'telegraf';
 import { prisma } from '../db/client';
 import { parseFeed, ParsedItem } from './parser';
-import { getBot, markBotApiHealthy } from '../bot/client';
-import { ensureTopicForSubscription } from '../bot/topics';
+import { getBot } from '../bot/client';
 import { formatArticleMessage, FormattedArticle } from '../bot/formatter';
 import { logger } from '../lib/logger';
 import { getTelegramErrorDescription } from '../lib/telegram-errors';
+import { bus } from '../lib/events';
+
+type TopicResolverInput = {
+  subscriptionId: string;
+  chatId: string;
+  feedName: string;
+  topicName?: string | null;
+  topicNameKey?: string | null;
+  topicThreadId?: number | null;
+  forceRecreate?: boolean;
+};
+
+let topicResolver: ((input: TopicResolverInput) => Promise<number | null>) | null = null;
+
+export function setTopicResolver(resolver: (input: TopicResolverInput) => Promise<number | null>): void {
+  topicResolver = resolver;
+}
 
 const RETRYABLE_NETWORK_CODES = new Set([
   'ECONNRESET',
@@ -175,7 +191,7 @@ async function sendArticle(
             ...threadOptions,
           }),
         );
-        markBotApiHealthy();
+        bus.emit('delivery:success');
         return;
       } catch (err) {
         if (isRetryableTelegramError(err)) {
@@ -192,7 +208,7 @@ async function sendArticle(
         ...threadOptions,
       }),
     );
-    markBotApiHealthy();
+    bus.emit('delivery:success');
   });
 }
 
@@ -215,7 +231,7 @@ async function deliverToSubscription(
   if (threadId === undefined) {
     threadId = sub.topicThreadId;
     if (threadId == null) {
-      threadId = await ensureTopicForSubscription({
+      threadId = await topicResolver!({
         subscriptionId: sub.id,
         chatId: sub.chatId,
         feedName,
@@ -233,7 +249,7 @@ async function deliverToSubscription(
   } catch (err) {
     if (typeof threadId === 'number' && isMissingTopicError(err)) {
       try {
-        const recreatedThreadId = await ensureTopicForSubscription({
+        const recreatedThreadId = await topicResolver!({
           subscriptionId: sub.id,
           chatId: sub.chatId,
           feedName,

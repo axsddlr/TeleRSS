@@ -3,9 +3,9 @@ import { z } from 'zod';
 import { prisma } from '../db/client';
 import { parseFeed } from '../rss/parser';
 import { checkFeed } from '../rss/fetcher';
-import { scheduleFeed, unscheduleFeed } from '../scheduler';
 import { auditLog, createAuditEvent } from '../audit/logger';
 import { logger } from '../lib/logger';
+import { bus } from '../lib/events';
 
 export const feedsRouter: IRouter = Router();
 
@@ -205,7 +205,7 @@ feedsRouter.post('/', async (req: Request, res: Response) => {
       },
     });
 
-    scheduleFeed(feed.id, feed.checkInterval);
+    bus.emit('feed:scheduled', feed.id, feed.checkInterval);
     
     // Audit log feed creation
     auditLog(createAuditEvent(
@@ -262,7 +262,7 @@ feedsRouter.post('/import', async (req: Request, res: Response) => {
         const feed = await prisma.feed.create({
           data: { url, name, description, checkInterval },
         });
-        scheduleFeed(feed.id, feed.checkInterval);
+        bus.emit('feed:scheduled', feed.id, feed.checkInterval);
         imported.push(feed);
       } catch (err: unknown) {
         if (err instanceof Error && err.message.includes('Unique constraint')) {
@@ -300,9 +300,9 @@ feedsRouter.put('/:id', async (req: Request, res: Response) => {
     // Reschedule if interval or active state changed
     if (updateData.checkInterval !== undefined || updateData.active !== undefined) {
       if (feed.active) {
-        scheduleFeed(feed.id, feed.checkInterval);
+        bus.emit('feed:scheduled', feed.id, feed.checkInterval);
       } else {
-        unscheduleFeed(feed.id);
+        bus.emit('feed:unscheduled', feed.id);
       }
     }
 
@@ -332,7 +332,7 @@ feedsRouter.delete('/:id', async (req: Request, res: Response) => {
   try {
     // Get feed info before deletion for audit log
     const feed = await prisma.feed.findUnique({ where: { id } });
-    unscheduleFeed(id);
+    bus.emit('feed:unscheduled', id);
     await prisma.feed.delete({ where: { id } });
     
     // Audit log feed deletion

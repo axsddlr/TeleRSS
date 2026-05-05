@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { prisma } from '../db/client';
 import { checkFeed } from '../rss/fetcher';
 import { logger } from '../lib/logger';
+import { bus } from '../lib/events';
 
 const jobs = new Map<string, cron.ScheduledTask>();
 const running = new Map<string, Promise<void>>();
@@ -66,3 +67,12 @@ export function stopScheduler(): void {
   running.clear();
   logger.info('Scheduler stopped');
 }
+
+// Listen for feed lifecycle events from the API layer
+bus.on('feed:scheduled', (feedId: string, intervalMinutes: number) => {
+  scheduleFeed(feedId, intervalMinutes);
+});
+
+bus.on('feed:unscheduled', (feedId: string) => {
+  unscheduleFeed(feedId);
+});

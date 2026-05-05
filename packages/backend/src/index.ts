@@ -7,6 +7,8 @@ import { initSecrets } from './auth/secrets';
 import { apiRouter } from './api/router';
 import { startBot, stopBot, setupChatTracking } from './bot/client';
 import { startScheduler, stopScheduler } from './scheduler';
+import { setTopicResolver } from './rss/fetcher';
+import { ensureTopicForSubscription } from './bot/topics';
 import { prisma } from './db/client';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { logger } from './lib/logger';
@@ -153,6 +155,9 @@ app.use(errorHandler);
 async function main() {
   // Resolve auth credentials before anything else
   await initSecrets();
+
+  // Wire up cross-module dependencies via the event bus
+  setTopicResolver(ensureTopicForSubscription);
 
   // Run DB migrations
   await prisma.$connect();

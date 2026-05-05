@@ -2,6 +2,10 @@ import { Telegraf } from 'telegraf';
 import { config } from '../config';
 import { prisma } from '../db/client';
 import { logger } from '../lib/logger';
+import { bus } from '../lib/events';
+
+// Re-mark the bot API as healthy after any successful delivery
+bus.on('delivery:success', () => markBotApiHealthy());
 
 let botInstance: Telegraf | null = null;
 let botStarted = false;
