@@ -1,6 +1,7 @@
 import { Router, Request, Response, IRouter } from 'express';
 import { prisma } from '../db/client';
 import { getBotStatus, probeBotConnection, syncKnownChats } from '../bot/client';
+import { logger } from '../lib/logger';
 
 export const botRouter: IRouter = Router();
 
@@ -10,7 +11,8 @@ botRouter.get('/status', async (_req: Request, res: Response) => {
     await probeBotConnection();
     const knownChats = await prisma.knownChat.count();
     res.json({ ...getBotStatus(), knownChats });
-  } catch {
+  } catch (err) {
+    logger.error('Failed to fetch bot status', { error: String(err) });
     res.status(500).json({ error: 'Failed to fetch bot status' });
   }
 });
@@ -28,7 +30,8 @@ botRouter.get('/chats', async (req: Request, res: Response) => {
       orderBy: { chatName: 'asc' },
     });
     res.json(chats);
-  } catch {
+  } catch (err) {
+    logger.error('Failed to fetch known chats', { error: String(err) });
     res.status(500).json({ error: 'Failed to fetch known chats' });
   }
 });
@@ -43,6 +46,7 @@ botRouter.post('/chats/sync', async (_req: Request, res: Response) => {
       res.status(503).json({ error: 'Bot not ready yet' });
       return;
     }
+    logger.error('Failed to sync chats', { error: String(err) });
     res.status(500).json({ error: 'Failed to sync chats' });
   }
 });

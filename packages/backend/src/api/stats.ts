@@ -1,5 +1,6 @@
 import { Router, Request, Response, IRouter } from 'express';
 import { prisma } from '../db/client';
+import { logger } from '../lib/logger';
 
 export const statsRouter: IRouter = Router();
 
@@ -37,7 +38,8 @@ statsRouter.get('/', async (_req: Request, res: Response) => {
         deliveredAt: item.deliveredAt,
       })),
     });
-  } catch {
+  } catch (err) {
+    logger.error('Failed to fetch stats', { error: String(err) });
     res.status(500).json({ error: 'Failed to fetch stats' });
   }
 });

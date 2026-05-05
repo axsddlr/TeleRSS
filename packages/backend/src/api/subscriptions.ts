@@ -1,6 +1,7 @@
 import { Router, Request, Response, IRouter } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db/client';
+import { logger } from '../lib/logger';
 import {
   buildTopicNameFromFeed,
   ensureTopicForSubscription,
@@ -51,8 +52,62 @@ subscriptionsRouter.get('/', async (req: Request, res: Response) => {
       orderBy: { createdAt: 'desc' },
     });
     res.json(subs);
-  } catch {
+  } catch (err) {
+    logger.error('Failed to fetch subscriptions', { error: String(err) });
     res.status(500).json({ error: 'Failed to fetch subscriptions' });
+  }
+});
+
+// POST /api/subscriptions
+subscriptionsRouter.post('/', async (req: Request, res: Response) => {
+  const parsed = createSubSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+    return;
+  }
+
+  const { feedId, chatId } = parsed.data;
+
+  try {
+    // Validate feed exists
+    const feed = await prisma.feed.findUnique({ where: { id: feedId } });
+    if (!feed) {
+      res.status(404).json({ error: 'Feed not found' });
+      return;
+    }
+
+    // Auto-resolve or create the forum topic for this subscription
+    const topicThreadId = await ensureTopicForSubscription({
+      subscriptionId: '', // placeholder — will be updated after creation
+      chatId,
+      feedName: feed.name,
+      topicName: parsed.data.chatName,
+      topicNameKey: parsed.data.chatName,
+      topicThreadId: null,
+    });
+
+    const sub = await prisma.subscription.create({
+      data: {
+        feedId,
+        chatId,
+        chatName: parsed.data.chatName,
+        topicThreadId,
+      },
+      include: { feed: { select: { id: true, name: true, url: true } } },
+    });
+
+    // Update subscription with the resolved topicThreadId
+    if (typeof topicThreadId === 'number') {
+      await prisma.subscription.update({
+        where: { id: sub.id },
+        data: { topicThreadId },
+      }).catch(() => {});
+    }
+
+    res.status(201).json(sub);
+  } catch (err) {
+    logger.error('Failed to create subscription', { error: String(err) });
+    res.status(500).json({ error: 'Failed to create subscription' });
   }
 });
 
@@ -103,6 +158,7 @@ subscriptionsRouter.post('/', async (req: Request, res: Response) => {
       res.status(409).json({ error: 'This feed is already subscribed to that chat' });
       return;
     }
+    logger.error('Failed to create subscription', { error: String(err) });
     res.status(500).json({ error: 'Failed to create subscription' });
   }
 });
@@ -148,7 +204,8 @@ subscriptionsRouter.post('/bulk', async (req: Request, res: Response) => {
     );
     const created = results.filter((r) => r.status === 'fulfilled').length;
     res.json({ created });
-  } catch {
+  } catch (err) {
+    logger.error('Failed to create subscriptions', { error: String(err) });
     res.status(500).json({ error: 'Failed to create subscriptions' });
   }
 });
@@ -175,6 +232,7 @@ subscriptionsRouter.patch('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Subscription not found' });
       return;
     }
+    logger.error('Failed to update subscription', { error: String(err) });
     res.status(500).json({ error: 'Failed to update subscription' });
   }
 });
@@ -190,6 +248,7 @@ subscriptionsRouter.delete('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Subscription not found' });
       return;
     }
+    logger.error('Failed to delete subscription', { error: String(err) });
     res.status(500).json({ error: 'Failed to delete subscription' });
   }
 });

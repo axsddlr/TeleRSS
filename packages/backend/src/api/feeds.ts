@@ -5,6 +5,7 @@ import { parseFeed } from '../rss/parser';
 import { checkFeed } from '../rss/fetcher';
 import { scheduleFeed, unscheduleFeed } from '../scheduler';
 import { auditLog, createAuditEvent } from '../audit/logger';
+import { logger } from '../lib/logger';
 
 export const feedsRouter: IRouter = Router();
 
@@ -176,6 +177,7 @@ feedsRouter.get('/', async (req: Request, res: Response) => {
     });
     res.json(feeds);
   } catch (err) {
+    logger.error('Failed to fetch feeds', { error: String(err) });
     res.status(500).json({ error: 'Failed to fetch feeds' });
   }
 });
@@ -370,7 +372,7 @@ feedsRouter.post('/:id/refresh', async (req: Request, res: Response) => {
     ));
 
     // Run check in background
-    checkFeed(id).catch((err) => console.error('Refresh error:', err));
+    checkFeed(id).catch((err) => logger.error('Refresh error', { feedId: id, error: String(err) }));
 
     res.json({ message: 'Feed refresh triggered' });
   } catch {
@@ -398,7 +400,7 @@ feedsRouter.post('/:id/force-push', async (req: Request, res: Response) => {
     ));
 
     const { count } = await prisma.deliveredItem.deleteMany({ where: { feedId: id } });
-    checkFeed(id).catch((err) => console.error('Force-push error:', err));
+    checkFeed(id).catch((err) => logger.error('Force-push error', { feedId: id, error: String(err) }));
 
     res.json({ cleared: count, message: 'Delivered history cleared, re-push triggered' });
   } catch {

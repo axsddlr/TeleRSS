@@ -1,6 +1,7 @@
 import { Telegraf } from 'telegraf';
 import { config } from '../config';
 import { prisma } from '../db/client';
+import { logger } from '../lib/logger';
 
 let botInstance: Telegraf | null = null;
 let botStarted = false;
@@ -98,8 +99,8 @@ async function upsertChat(
         update: { chatName, chatType, isAdmin },
       });
       return;
-    } catch {
-      // Fall back to recording chat with unknown admin status.
+    } catch (err) {
+      logger.warn(`Could not verify admin status for chat ${chatId}`, { error: String(err) });
     }
   }
 
@@ -153,8 +154,8 @@ export async function syncKnownChats(): Promise<{ updated: number; removed: numb
           });
           updated++;
         }
-      } catch {
-        // Chat may no longer be accessible; remove it
+      } catch (err) {
+        logger.warn(`Removing inaccessible chat ${chat.chatId}`, { error: String(err) });
         await prisma.knownChat.delete({ where: { chatId: chat.chatId } }).catch(() => {});
         removed++;
       }

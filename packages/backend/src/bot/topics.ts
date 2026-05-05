@@ -1,5 +1,6 @@
 import { prisma } from '../db/client';
 import { getBot } from './client';
+import { logger } from '../lib/logger';
 
 const MAX_TOPIC_NAME_LENGTH = 128;
 const FORUM_CAPABILITY_TTL_MS = 5 * 60 * 1000;
@@ -70,7 +71,9 @@ export async function ensureTopicForSubscription(input: EnsureTopicInput): Promi
   await prisma.subscription.update({
     where: { id: input.subscriptionId },
     data: { topicName, topicNameKey },
-  }).catch(() => {});
+  }).catch((err) => {
+    logger.warn(`Failed to update topic name for sub ${input.subscriptionId}`, { error: String(err) });
+  });
 
   if (!input.forceRecreate && typeof input.topicThreadId === 'number') {
     return input.topicThreadId;
@@ -102,7 +105,9 @@ export async function ensureTopicForSubscription(input: EnsureTopicInput): Promi
           topicNameKey,
           topicThreadId: existing.topicThreadId,
         },
-      }).catch(() => {});
+      }).catch((err) => {
+      logger.warn(`Failed to link existing topic for sub ${input.subscriptionId}`, { error: String(err) });
+    });
       return existing.topicThreadId;
     }
   }
@@ -134,14 +139,14 @@ export async function ensureTopicForSubscription(input: EnsureTopicInput): Promi
         topicNameKey,
         topicThreadId: threadId,
       },
-    }).catch(() => {});
+    }).catch((err) => {
+      logger.warn(`Failed to persist topic thread ID for sub ${input.subscriptionId}`, { error: String(err) });
+    });
 
     return threadId;
   } catch (err) {
     const reason = getTelegramErrorDescription(err);
-    console.warn(
-      `Failed to create topic "${topicName}" for chat ${input.chatId}: ${reason}`,
-    );
+    logger.warn(`Failed to create topic "${topicName}" for chat ${input.chatId}`, { reason });
     return null;
   }
 }
