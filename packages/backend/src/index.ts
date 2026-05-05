@@ -138,7 +138,7 @@ app.use(errorHandler);
 
 async function main() {
   // Resolve auth credentials before anything else
-  initSecrets();
+  await initSecrets();
 
   // Run DB migrations
   await prisma.$connect();

@@ -6,6 +6,7 @@ const MAX_TOPIC_NAME_LENGTH = 128;
 const FORUM_CAPABILITY_TTL_MS = 5 * 60 * 1000;
 
 const forumCapabilityCache = new Map<string, { isForum: boolean; checkedAt: number }>();
+const MAX_FORUM_CACHE_SIZE = 500;
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
@@ -47,6 +48,10 @@ async function isForumEnabledSupergroup(chatId: string): Promise<boolean> {
     const chat = await getBot().telegram.getChat(chatId);
     const isForum = chat.type === 'supergroup' && Boolean((chat as { is_forum?: boolean }).is_forum);
     forumCapabilityCache.set(chatId, { isForum, checkedAt: now });
+    if (forumCapabilityCache.size > MAX_FORUM_CACHE_SIZE) {
+      const firstKey = forumCapabilityCache.keys().next().value;
+      if (firstKey !== undefined) forumCapabilityCache.delete(firstKey);
+    }
     return isForum;
   } catch {
     return false;

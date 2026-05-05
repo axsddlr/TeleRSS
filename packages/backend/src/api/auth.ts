@@ -46,7 +46,7 @@ interface CookieSerializeOptions {
   path: string;
 }
 
-authRouter.post('/login', loginLimiter, bruteForceProtection, (req: Request, res: Response) => {
+authRouter.post('/login', loginLimiter, bruteForceProtection, async (req: Request, res: Response) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Password is required' });
@@ -54,7 +54,7 @@ authRouter.post('/login', loginLimiter, bruteForceProtection, (req: Request, res
   }
 
   const { adminPasswordHash, jwtSecret } = getSecrets();
-  if (!verifyPassword(parsed.data.password, adminPasswordHash)) {
+  if (!await verifyPassword(parsed.data.password, adminPasswordHash)) {
     // Record failed attempt with exponential backoff
     const { delayMs, attempts } = recordFailedAttempt(req);
     
@@ -119,7 +119,7 @@ authProtectedRouter.get('/status', (_req: Request, res: Response) => {
   res.json({ passwordFromEnv: isPasswordFromEnv() });
 });
 
-authProtectedRouter.post('/change-password', (req: Request, res: Response) => {
+authProtectedRouter.post('/change-password', async (req: Request, res: Response) => {
   const parsed = changePasswordSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0].message });
@@ -127,7 +127,7 @@ authProtectedRouter.post('/change-password', (req: Request, res: Response) => {
   }
 
   const { adminPasswordHash } = getSecrets();
-  if (!verifyPassword(parsed.data.currentPassword, adminPasswordHash)) {
+  if (!await verifyPassword(parsed.data.currentPassword, adminPasswordHash)) {
     // Audit log failed password change attempt
     auditLog(createAuditEvent(
       'auth.password.change',
@@ -140,7 +140,7 @@ authProtectedRouter.post('/change-password', (req: Request, res: Response) => {
   }
 
   try {
-    updatePassword(parsed.data.newPassword);
+    await updatePassword(parsed.data.newPassword);
     // Audit log successful password change
     auditLog(createAuditEvent(
       'auth.password.change',

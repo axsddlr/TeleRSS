@@ -12,6 +12,7 @@ interface FailedAttempt {
 }
 
 const failedAttempts = new Map<string, FailedAttempt>();
+const MAX_MAP_SIZE = 1000;
 
 // Configuration
 const MAX_ATTEMPTS = 5; // Max attempts before exponential backoff kicks in
@@ -144,6 +145,15 @@ setInterval(() => {
   const now = Date.now();
   for (const [clientId, data] of failedAttempts.entries()) {
     if ((now - data.lastAttempt) > RESET_WINDOW_MS) {
+      failedAttempts.delete(clientId);
+    }
+  }
+
+  if (failedAttempts.size > MAX_MAP_SIZE) {
+    const sorted = [...failedAttempts.entries()]
+      .sort((a, b) => a[1].lastAttempt - b[1].lastAttempt);
+    const toDelete = sorted.slice(0, failedAttempts.size - MAX_MAP_SIZE);
+    for (const [clientId] of toDelete) {
       failedAttempts.delete(clientId);
     }
   }
