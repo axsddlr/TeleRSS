@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getSecrets, isPasswordFromEnv, updatePassword, verifyPassword } from '../auth/secrets';
 import { auditLog, createAuditEvent, getClientIP } from '../audit/logger';
 import { bruteForceProtection, recordFailedAttempt, clearFailedAttempts } from '../middleware/bruteForce';
+import { config } from '../config';
 
 export const authRouter: IRouter = Router();
 
@@ -31,7 +32,7 @@ const loginSchema = z.object({ password: z.string().min(1) });
 // Cookie configuration for secure JWT storage
 const COOKIE_OPTIONS: CookieSerializeOptions = {
   httpOnly: true,
-  secure: false, // Allow HTTP deployments (no HTTPS proxy). Mirrors CSRF cookie.
+  secure: !config.INSECURE_COOKIES,
   sameSite: 'strict',
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   path: '/',

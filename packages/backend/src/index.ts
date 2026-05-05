@@ -43,7 +43,7 @@ const { generateToken, doubleCsrfProtection } = doubleCsrf({
   getSecret: () => config.TELEGRAM_BOT_TOKEN,
   cookieName: '_csrf',
   cookieOptions: {
-    secure: false, // Allow HTTP access (e.g. Portainer without an HTTPS proxy)
+    secure: !config.INSECURE_COOKIES,
     sameSite: 'strict',
     httpOnly: true,
   },
