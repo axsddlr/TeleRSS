@@ -80,6 +80,20 @@ app.use((_req, res, next) => {
   next();
 });
 
+// Request ID and duration logging
+app.use((_req, res, next) => {
+  const start = Date.now();
+  const requestId = Math.random().toString(36).slice(2, 10);
+  res.setHeader('X-Request-Id', requestId);
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    if (duration > 1000 || res.statusCode >= 500) {
+      logger.warn(`${_req.method} ${_req.url}`, { statusCode: res.statusCode, durationMs: duration, requestId });
+    }
+  });
+  next();
+});
+
 // Health check endpoint (no auth required, for monitoring)
 app.get('/health', async (req, res) => {
   const health = {

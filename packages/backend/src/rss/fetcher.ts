@@ -5,6 +5,7 @@ import { getBot, markBotApiHealthy } from '../bot/client';
 import { ensureTopicForSubscription } from '../bot/topics';
 import { formatArticleMessage, FormattedArticle } from '../bot/formatter';
 import { logger } from '../lib/logger';
+import { getTelegramErrorDescription } from '../lib/telegram-errors';
 
 const RETRYABLE_NETWORK_CODES = new Set([
   'ECONNRESET',
@@ -138,21 +139,6 @@ async function runWithTelegramRetry<T>(
       waitMs = Math.min(waitMs * 2, 10_000);
     }
   }
-}
-
-function getTelegramErrorDescription(err: unknown): string {
-  if (!err || typeof err !== 'object') return String(err);
-
-  const maybeErr = err as {
-    response?: { description?: unknown };
-    description?: unknown;
-    message?: unknown;
-  };
-
-  if (typeof maybeErr.response?.description === 'string') return maybeErr.response.description;
-  if (typeof maybeErr.description === 'string') return maybeErr.description;
-  if (typeof maybeErr.message === 'string') return maybeErr.message;
-  return String(err);
 }
 
 function isMissingTopicError(err: unknown): boolean {

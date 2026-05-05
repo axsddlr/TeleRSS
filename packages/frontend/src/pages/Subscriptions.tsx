@@ -1,11 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, Subscription } from '../lib/api';
+import { formatDateTime } from '../lib/format';
 import AssignChatModal from '../components/AssignChatModal';
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleString();
-}
 
 function BotConnectionCard() {
   const queryClient = useQueryClient();
@@ -118,7 +115,7 @@ function SubRow({ sub }: { sub: Subscription }) {
       </td>
       <td className="px-4 py-3 text-sm font-mono text-gray-700 dark:text-gray-300">{sub.chatId}</td>
       <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{sub.chatName ?? '—'}</td>
-      <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">{formatDate(sub.createdAt)}</td>
+      <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">{formatDateTime(sub.createdAt)}</td>
       <td className="px-4 py-3 text-center">
         <button
           onClick={() => toggleMutation.mutate()}

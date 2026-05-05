@@ -1,6 +1,7 @@
 import { prisma } from '../db/client';
 import { getBot } from './client';
 import { logger } from '../lib/logger';
+import { getTelegramErrorDescription } from '../lib/telegram-errors';
 
 const MAX_TOPIC_NAME_LENGTH = 128;
 const FORUM_CAPABILITY_TTL_MS = 5 * 60 * 1000;
@@ -20,21 +21,6 @@ export function buildTopicNameFromFeed(feedName: string): string {
 
 export function normalizeTopicName(value: string): string {
   return normalizeWhitespace(value).toLowerCase();
-}
-
-function getTelegramErrorDescription(err: unknown): string {
-  if (!err || typeof err !== 'object') return String(err);
-
-  const maybeErr = err as {
-    response?: { description?: unknown };
-    description?: unknown;
-    message?: unknown;
-  };
-
-  if (typeof maybeErr.response?.description === 'string') return maybeErr.response.description;
-  if (typeof maybeErr.description === 'string') return maybeErr.description;
-  if (typeof maybeErr.message === 'string') return maybeErr.message;
-  return String(err);
 }
 
 async function isForumEnabledSupergroup(chatId: string): Promise<boolean> {

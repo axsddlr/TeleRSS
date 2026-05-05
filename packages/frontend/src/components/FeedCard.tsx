@@ -1,15 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { HiArrowPath, HiArrowUpTray, HiPencil, HiTrash } from 'react-icons/hi2';
 import { Feed, api } from '../lib/api';
+import { formatDateTime } from '../lib/format';
 
 interface Props {
   feed: Feed;
   onEdit: (feed: Feed) => void;
-}
-
-function formatDate(dateStr?: string): string {
-  if (!dateStr) return 'Never';
-  return new Date(dateStr).toLocaleString();
 }
 
 export default function FeedCard({ feed, onEdit }: Props) {
@@ -75,7 +71,7 @@ export default function FeedCard({ feed, onEdit }: Props) {
         {feed.checkInterval}m
       </td>
       <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
-        {formatDate(feed.lastCheckedAt)}
+        {formatDateTime(feed.lastCheckedAt)}
       </td>
       <td className="px-4 py-3 text-center text-sm text-gray-600 dark:text-gray-300">
         {feed._count?.subscriptions ?? 0}

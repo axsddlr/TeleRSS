@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { HiRss, HiBell, HiInboxArrowDown } from 'react-icons/hi2';
 import { api } from '../lib/api';
+import { formatDateTime } from '../lib/format';
 
 function StatCard({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
   return (
@@ -14,10 +15,6 @@ function StatCard({ label, value, icon }: { label: string; value: number; icon: 
       </div>
     </div>
   );
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleString();
 }
 
 export default function Dashboard() {
@@ -95,7 +92,7 @@ export default function Dashboard() {
                       {item.chatId ?? '—'}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
-                      {formatDate(item.deliveredAt)}
+                      {formatDateTime(item.deliveredAt)}
                     </td>
                   </tr>
                 ))}
