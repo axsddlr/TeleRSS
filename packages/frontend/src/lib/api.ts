@@ -58,6 +58,7 @@ export interface ActivityItem {
 
 const TOKEN_KEY = 'auth_token';
 let csrfTokenCache: string | null = null;
+let isNavigatingToLogin = false;
 
 // Auth storage now uses sessionStorage for login state tracking only
 // Actual JWT is stored in httpOnly cookie by the server
@@ -142,8 +143,11 @@ async function request<T>(path: string, options?: RequestInit, retry = true): Pr
 
   if (res.status === 401) {
     authStorage.clearToken();
-    window.location.href = '/login';
-    return new Promise(() => {});  // never resolves; navigation is in flight
+    if (!isNavigatingToLogin) {
+      isNavigatingToLogin = true;
+      window.location.replace('/login');
+    }
+    throw new Error('Session expired');
   }
 
   if (!res.ok) {
