@@ -247,6 +247,7 @@ TeleRSS/
 | `PUT` | `/api/feeds/:id` | Update a feed |
 | `DELETE` | `/api/feeds/:id` | Delete a feed (cascades subscriptions) |
 | `POST` | `/api/feeds/:id/refresh` | Trigger immediate feed check |
+| `POST` | `/api/feeds/:id/force-push` | Clear delivered history and re-push all items |
 | `GET` | `/api/subscriptions` | List all subscriptions |
 | `POST` | `/api/subscriptions` | Create a subscription |
 | `PATCH` | `/api/subscriptions/:id` | Toggle active state |
