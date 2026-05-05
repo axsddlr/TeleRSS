@@ -37,6 +37,9 @@ jobs:
       - name: Lint backend
         run: pnpm --filter backend eslint src/
 
+      - name: Lint frontend
+        run: pnpm --filter frontend eslint src/
+
   build-and-push:
     name: Build and push to ghcr.io
     runs-on: ubuntu-latest
