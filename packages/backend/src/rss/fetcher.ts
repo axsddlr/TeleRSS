@@ -4,6 +4,7 @@ import { parseFeed, ParsedItem } from './parser';
 import { getBot, markBotApiHealthy } from '../bot/client';
 import { ensureTopicForSubscription } from '../bot/topics';
 import { formatArticleMessage, FormattedArticle } from '../bot/formatter';
+import { logger } from '../lib/logger';
 
 const RETRYABLE_NETWORK_CODES = new Set([
   'ECONNRESET',
@@ -128,8 +129,9 @@ async function runWithTelegramRetry<T>(
       const retryAfterMs = getTelegramRetryAfterMs(err);
       const effectiveWaitMs = retryAfterMs ?? waitMs;
       const reason = err instanceof Error ? err.message : String(err);
-      console.warn(
-        `Telegram ${operation} failed (attempt ${attempt}/${maxAttempts}): ${reason}. Retrying in ${effectiveWaitMs}ms...`,
+      logger.warn(
+        `Telegram ${operation} failed (attempt ${attempt}/${maxAttempts})`,
+        { reason, retryInMs: effectiveWaitMs },
       );
       await sleep(effectiveWaitMs);
       attempt++;
@@ -261,14 +263,14 @@ async function deliverToSubscription(
           return true;
         }
       } catch (recreateErr) {
-        console.error(
-          `Failed to recreate topic for chat ${sub.chatId} and feed ${feedName}:`,
-          recreateErr,
+        logger.error(
+          `Failed to recreate topic for chat ${sub.chatId}`,
+          { feedName: feedName, error: String(recreateErr) },
         );
       }
     }
 
-    console.error(`Failed to send message to chat ${sub.chatId}:`, err);
+    logger.error(`Failed to send message to chat ${sub.chatId}`, { error: String(err) });
     return false;
   }
 }
@@ -328,8 +330,9 @@ async function deliverNewItems(
     }
 
     if (!sentToAny) {
-      console.warn(
-        `No deliveries succeeded for "${feedName}" item "${item.title ?? item.guid}". Will retry on next run.`,
+      logger.warn(
+        `No deliveries succeeded for "${feedName}" item`,
+        { itemTitle: item.title ?? item.guid },
       );
       continue;
     }
@@ -346,7 +349,7 @@ async function deliverNewItems(
       newItemCount++;
     } catch (err) {
       if (err instanceof Error && err.message.includes('Unique constraint')) continue;
-      console.error('Error recording delivered item:', err);
+      logger.error('Error recording delivered item', { error: String(err) });
     }
   }
 
@@ -370,7 +373,7 @@ export async function checkFeed(feedId: string): Promise<void> {
   try {
     parsedFeed = await parseFeed(feed.url);
   } catch (err) {
-    console.error(`Failed to parse feed ${feed.url}:`, err);
+    logger.error(`Failed to parse feed ${feed.url}`, { error: String(err) });
     await prisma.feed.update({
       where: { id: feedId },
       data: { lastCheckedAt: new Date() },
@@ -393,6 +396,6 @@ export async function checkFeed(feedId: string): Promise<void> {
   });
 
   if (newItemCount > 0) {
-    console.log(`Feed "${feed.name}": delivered ${newItemCount} new item(s)`);
+    logger.info(`Feed "${feed.name}": delivered ${newItemCount} new item(s)`);
   }
 }

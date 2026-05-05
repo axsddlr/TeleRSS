@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { Prisma } from '@prisma/client';
+import { logger } from '../lib/logger';
 
 /**
  * Global error handler middleware
@@ -15,11 +16,7 @@ export function errorHandler(
   _next: NextFunction
 ): void {
   // Log full error for debugging (server-side only)
-  console.error('Error:', {
-    name: err.name,
-    message: err.message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-  });
+  logger.error('Error:', { name: err.name, message: err.message, stack: process.env.NODE_ENV === 'development' ? err.stack : undefined });
 
   // Handle Prisma-specific errors
   if (err instanceof Prisma.PrismaClientKnownRequestError) {

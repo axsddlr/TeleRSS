@@ -9,6 +9,7 @@ import { startBot, stopBot, setupChatTracking } from './bot/client';
 import { startScheduler, stopScheduler } from './scheduler';
 import { prisma } from './db/client';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import { logger } from './lib/logger';
 import { doubleCsrf } from 'csrf-csrf';
 
 const app = express();
@@ -141,11 +142,11 @@ async function main() {
 
   // Run DB migrations
   await prisma.$connect();
-  console.log('Database connected');
+  logger.info('Database connected');
 
   // Start HTTP server
   const server = app.listen(config.PORT, () => {
-    console.log(`TeleRSS server running on http://localhost:${config.PORT}`);
+    logger.info(`TeleRSS server running on http://localhost:${config.PORT}`);
   });
 
   // Register bot update handlers, then start polling (without blocking HTTP startup)
@@ -156,12 +157,12 @@ async function main() {
   try {
     await startScheduler();
   } catch (err) {
-    console.error('Scheduler startup error:', err);
+    logger.error('Scheduler startup error', { error: String(err) });
   }
 
   // Graceful shutdown
   const shutdown = async (signal: string) => {
-    console.log(`Received ${signal}, shutting down...`);
+    logger.info(`Received ${signal}, shutting down...`);
     server.close();
 
     // Drain in-flight requests before disconnecting the database
@@ -171,7 +172,7 @@ async function main() {
       await new Promise((r) => setTimeout(r, 100));
     }
     if (activeRequests > 0) {
-      console.warn(`Forcing shutdown with ${activeRequests} request(s) still in-flight`);
+      logger.warn(`Forcing shutdown with ${activeRequests} request(s) still in-flight`);
     }
 
     stopScheduler();
@@ -185,6 +186,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('Failed to start server:', err);
+  logger.error('Failed to start server', { error: String(err) });
   process.exit(1);
 });

@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { prisma } from '../db/client';
 import { checkFeed } from '../rss/fetcher';
+import { logger } from '../lib/logger';
 
 const jobs = new Map<string, cron.ScheduledTask>();
 const running = new Map<string, Promise<void>>();
@@ -23,7 +24,7 @@ export async function startScheduler(): Promise<void> {
     scheduleFeed(feed.id, feed.checkInterval);
   }
 
-  console.log(`Scheduler started with ${feeds.length} active feed(s)`);
+  logger.info(`Scheduler started with ${feeds.length} active feed(s)`);
 }
 
 export function scheduleFeed(feedId: string, intervalMinutes: number): void {
@@ -36,7 +37,7 @@ export function scheduleFeed(feedId: string, intervalMinutes: number): void {
       try {
         await checkFeed(feedId);
       } catch (err) {
-        console.error(`Scheduler error for feed ${feedId}:`, err);
+        logger.error(`Scheduler error for feed ${feedId}`, { error: String(err) });
       } finally {
         running.delete(feedId);
       }
@@ -63,5 +64,5 @@ export function stopScheduler(): void {
     jobs.delete(id);
   }
   running.clear();
-  console.log('Scheduler stopped');
+  logger.info('Scheduler stopped');
 }
