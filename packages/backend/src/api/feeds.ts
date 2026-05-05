@@ -135,6 +135,30 @@ function getFeedValidationMessage(err: unknown): string {
   return 'Could not fetch, validate, or parse the RSS feed at that URL';
 }
 
+async function throttledAllSettled<T>(
+  tasks: (() => Promise<T>)[],
+  concurrency: number,
+): Promise<PromiseSettledResult<T>[]> {
+  const results: PromiseSettledResult<T>[] = new Array(tasks.length);
+  let cursor = 0;
+
+  const worker = async () => {
+    while (cursor < tasks.length) {
+      const i = cursor++;
+      try {
+        results[i] = { status: 'fulfilled', value: await tasks[i]() };
+      } catch (reason) {
+        results[i] = { status: 'rejected', reason };
+      }
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker()),
+  );
+  return results;
+}
+
 // GET /api/feeds?limit=50&offset=0
 feedsRouter.get('/', async (req: Request, res: Response) => {
   try {
@@ -210,12 +234,13 @@ feedsRouter.post('/import', async (req: Request, res: Response) => {
 
   const { feeds } = parsed.data;
 
-  // Validate all feeds in parallel
-  const validationResults = await Promise.allSettled(
-    feeds.map(async (f) => {
+  // Validate feeds with limited concurrency to avoid exhausting file descriptors
+  const validationResults = await throttledAllSettled(
+    feeds.map((f) => async () => {
       const description = await getValidatedFeedDescription(f.url);
       return { ...f, description };
-    })
+    }),
+    5,
   );
 
   const imported: object[] = [];
