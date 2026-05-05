@@ -10,6 +10,7 @@ data/
 packages/backend/.env
 packages/frontend/.env
 packages/frontend/dist/
+packages/backend/public/
 .DS_Store
 .claude/settings.local.json
 # Logs
@@ -17,3 +18,4 @@ logs/
 *.log
 npm-debug.log*
 pnpm-debug.log*
+tasks/*

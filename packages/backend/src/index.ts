@@ -94,7 +94,7 @@ app.get('/health', async (req, res) => {
 
   // Check database connectivity
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    await prisma.feed.count({ take: 1 });
     health.checks.database = true;
   } catch {
     health.status = 'degraded';

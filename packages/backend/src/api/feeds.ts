@@ -390,6 +390,13 @@ feedsRouter.post('/:id/force-push', async (req: Request, res: Response) => {
       return;
     }
 
+    auditLog(createAuditEvent(
+      'feed.force-push',
+      req,
+      'success',
+      { resourceType: 'feed', resourceId: id, resourceName: feed.name }
+    ));
+
     const { count } = await prisma.deliveredItem.deleteMany({ where: { feedId: id } });
     checkFeed(id).catch((err) => console.error('Force-push error:', err));
 
