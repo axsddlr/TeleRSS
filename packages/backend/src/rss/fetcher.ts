@@ -1,6 +1,6 @@
 import { Telegraf } from 'telegraf';
 import { prisma } from '../db/client';
-import { parseFeed } from './parser';
+import { parseFeed, ParsedItem } from './parser';
 import { getBot, markBotApiHealthy } from '../bot/client';
 import { ensureTopicForSubscription } from '../bot/topics';
 import { formatArticleMessage, FormattedArticle } from '../bot/formatter';
@@ -208,6 +208,151 @@ async function sendArticle(
   });
 }
 
+async function deliverToSubscription(
+  bot: Telegraf,
+  sub: {
+    id: string;
+    chatId: string;
+    chatName?: string | null;
+    topicName?: string | null;
+    topicNameKey?: string | null;
+    topicThreadId?: number | null;
+    active: boolean;
+  },
+  formatted: FormattedArticle,
+  feedName: string,
+  resolvedThreadIds: Map<string, number | null>,
+): Promise<boolean> {
+  let threadId = resolvedThreadIds.get(sub.id);
+  if (threadId === undefined) {
+    threadId = sub.topicThreadId;
+    if (threadId == null) {
+      threadId = await ensureTopicForSubscription({
+        subscriptionId: sub.id,
+        chatId: sub.chatId,
+        feedName,
+        topicName: sub.topicName,
+        topicNameKey: sub.topicNameKey,
+        topicThreadId: sub.topicThreadId,
+      });
+    }
+    resolvedThreadIds.set(sub.id, threadId);
+  }
+
+  try {
+    await sendArticle(bot, sub.chatId, formatted, threadId ?? undefined);
+    return true;
+  } catch (err) {
+    if (typeof threadId === 'number' && isMissingTopicError(err)) {
+      try {
+        const recreatedThreadId = await ensureTopicForSubscription({
+          subscriptionId: sub.id,
+          chatId: sub.chatId,
+          feedName,
+          topicName: sub.topicName,
+          topicNameKey: sub.topicNameKey,
+          topicThreadId: sub.topicThreadId,
+          forceRecreate: true,
+        });
+        resolvedThreadIds.set(sub.id, recreatedThreadId);
+
+        if (typeof recreatedThreadId === 'number') {
+          await sendArticle(bot, sub.chatId, formatted, recreatedThreadId);
+          return true;
+        }
+      } catch (recreateErr) {
+        console.error(
+          `Failed to recreate topic for chat ${sub.chatId} and feed ${feedName}:`,
+          recreateErr,
+        );
+      }
+    }
+
+    console.error(`Failed to send message to chat ${sub.chatId}:`, err);
+    return false;
+  }
+}
+
+async function deliverNewItems(
+  feedId: string,
+  feedName: string,
+  bot: Telegraf,
+  subscriptions: {
+    id: string;
+    chatId: string;
+    chatName?: string | null;
+    topicName?: string | null;
+    topicNameKey?: string | null;
+    topicThreadId?: number | null;
+    active: boolean;
+  }[],
+  itemsToSend: ParsedItem[],
+): Promise<number> {
+  if (subscriptions.length === 0) return 0;
+
+  // Batch lookup: fetch all already-delivered GUIDs in a single query
+  const itemGuids = itemsToSend.filter((i) => i.guid).map((i) => i.guid);
+  const deliveredGuids = new Set(
+    itemGuids.length > 0
+      ? (
+          await prisma.deliveredItem.findMany({
+            where: { feedId, articleGuid: { in: itemGuids } },
+            select: { articleGuid: true },
+          })
+        ).map((d) => d.articleGuid)
+      : [],
+  );
+
+  let newItemCount = 0;
+  const resolvedThreadIds = new Map<string, number | null>();
+
+  for (const item of itemsToSend) {
+    if (!item.guid) continue;
+    if (deliveredGuids.has(item.guid)) continue;
+    if (newItemCount >= MAX_ITEMS_PER_RUN) break;
+
+    const formatted = formatArticleMessage({
+      feedName,
+      title: item.title,
+      link: item.link,
+      description: item.description,
+      pubDate: item.pubDate,
+      imageUrl: item.imageUrl,
+      author: item.author,
+    });
+
+    let sentToAny = false;
+    for (const sub of subscriptions) {
+      const delivered = await deliverToSubscription(bot, sub, formatted, feedName, resolvedThreadIds);
+      if (delivered) sentToAny = true;
+    }
+
+    if (!sentToAny) {
+      console.warn(
+        `No deliveries succeeded for "${feedName}" item "${item.title ?? item.guid}". Will retry on next run.`,
+      );
+      continue;
+    }
+
+    try {
+      await prisma.deliveredItem.create({
+        data: {
+          feedId,
+          articleGuid: item.guid,
+          articleTitle: item.title,
+          chatId: subscriptions[0]?.chatId,
+        },
+      });
+      newItemCount++;
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('Unique constraint')) continue;
+      console.error('Error recording delivered item:', err);
+    }
+  }
+
+  return newItemCount;
+}
+
 export async function checkFeed(feedId: string): Promise<void> {
   const feed = await prisma.feed.findUnique({
     where: { id: feedId },
@@ -233,124 +378,14 @@ export async function checkFeed(feedId: string): Promise<void> {
     return;
   }
 
-  const bot = getBot();
-  let newItemCount = 0;
-
   const itemsToSend = [...parsedFeed.items].sort((a, b) => {
     const aTime = a.pubDate?.getTime() ?? 0;
     const bTime = b.pubDate?.getTime() ?? 0;
     return aTime - bTime;
   });
 
-  // Batch lookup: fetch all already-delivered GUIDs in a single query
-  const itemGuids = itemsToSend.filter((i) => i.guid).map((i) => i.guid);
-  const deliveredGuids = new Set(
-    itemGuids.length > 0
-      ? (
-          await prisma.deliveredItem.findMany({
-            where: { feedId, articleGuid: { in: itemGuids } },
-            select: { articleGuid: true },
-          })
-        ).map((d) => d.articleGuid)
-      : [],
-  );
-
-  // Per-run cache for resolved topic thread IDs so we only resolve once per subscription
-  const resolvedThreadIds = new Map<string, number | null>();
-
-  for (const item of itemsToSend) {
-    if (!item.guid) continue;
-
-    if (deliveredGuids.has(item.guid)) continue;
-    if (newItemCount >= MAX_ITEMS_PER_RUN) break;
-    let sentToAnySubscription = false;
-
-    // Send to all active subscriptions
-    if (feed.subscriptions.length > 0) {
-      const formatted = formatArticleMessage({
-        feedName: feed.name,
-        title: item.title,
-        link: item.link,
-        description: item.description,
-        pubDate: item.pubDate,
-        imageUrl: item.imageUrl,
-        author: item.author,
-      });
-
-      for (const sub of feed.subscriptions) {
-        let threadId = resolvedThreadIds.get(sub.id);
-        if (threadId === undefined) {
-          threadId = sub.topicThreadId;
-          if (threadId == null) {
-            threadId = await ensureTopicForSubscription({
-              subscriptionId: sub.id,
-              chatId: sub.chatId,
-              feedName: feed.name,
-              topicName: sub.topicName,
-              topicNameKey: sub.topicNameKey,
-              topicThreadId: sub.topicThreadId,
-            });
-          }
-          resolvedThreadIds.set(sub.id, threadId);
-        }
-
-        try {
-          await sendArticle(bot, sub.chatId, formatted, threadId ?? undefined);
-          sentToAnySubscription = true;
-        } catch (err) {
-          if (typeof threadId === 'number' && isMissingTopicError(err)) {
-            try {
-              const recreatedThreadId = await ensureTopicForSubscription({
-                subscriptionId: sub.id,
-                chatId: sub.chatId,
-                feedName: feed.name,
-                topicName: sub.topicName,
-                topicNameKey: sub.topicNameKey,
-                topicThreadId: sub.topicThreadId,
-                forceRecreate: true,
-              });
-              resolvedThreadIds.set(sub.id, recreatedThreadId);
-
-              if (typeof recreatedThreadId === 'number') {
-                await sendArticle(bot, sub.chatId, formatted, recreatedThreadId);
-                sentToAnySubscription = true;
-                continue;
-              }
-            } catch (recreateErr) {
-              console.error(
-                `Failed to recreate topic for chat ${sub.chatId} and feed ${feed.name}:`,
-                recreateErr,
-              );
-            }
-          }
-
-          console.error(`Failed to send message to chat ${sub.chatId}:`, err);
-        }
-      }
-    }
-    if (!sentToAnySubscription) {
-      console.warn(
-        `No deliveries succeeded for "${feed.name}" item "${item.title ?? item.guid}". Will retry on next run.`,
-      );
-      continue;
-    }
-
-    try {
-      await prisma.deliveredItem.create({
-        data: {
-          feedId,
-          articleGuid: item.guid,
-          articleTitle: item.title,
-          chatId: feed.subscriptions[0]?.chatId,
-        },
-      });
-      newItemCount++;
-    } catch (err) {
-      // Unique constraint = another process already claimed this item; skip it.
-      if (err instanceof Error && err.message.includes('Unique constraint')) continue;
-      console.error('Error recording delivered item:', err);
-    }
-  }
+  const bot = getBot();
+  const newItemCount = await deliverNewItems(feedId, feed.name, bot, feed.subscriptions, itemsToSend);
 
   await prisma.feed.update({
     where: { id: feedId },
