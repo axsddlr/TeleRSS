@@ -1,7 +1,5 @@
 import { z } from 'zod';
-import * as dotenv from 'dotenv';
-
-dotenv.config();
+import 'dotenv/config';
 
 const configSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1, 'TELEGRAM_BOT_TOKEN is required'),
