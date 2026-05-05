@@ -34,6 +34,35 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
 }
 
+function truncateHtml(html: string, maxLength: number): string {
+  if (html.length <= maxLength) return html;
+
+  const slice = html.slice(0, maxLength);
+  const lastTagEnd = slice.lastIndexOf('>');
+  if (lastTagEnd === -1) return slice + '…';
+
+  let result = slice.slice(0, lastTagEnd + 1);
+
+  const openTags: string[] = [];
+  const tagPattern = /<\/?([a-zA-Z][a-zA-Z0-9]*)[^>]*>/g;
+  let m;
+  while ((m = tagPattern.exec(result)) !== null) {
+    if (m[0].startsWith('</')) {
+      if (openTags.length > 0 && openTags[openTags.length - 1] === m[1]) {
+        openTags.pop();
+      }
+    } else if (!m[0].endsWith('/>')) {
+      openTags.push(m[1]);
+    }
+  }
+
+  for (let i = openTags.length - 1; i >= 0; i--) {
+    result += `</${openTags[i]}>`;
+  }
+
+  return result + '…';
+}
+
 function cleanDescription(text: string): string {
   return text
     .replace(/submitted by\s+\/?u\/\S+/gi, '')  // Reddit "submitted by /u/name"
@@ -73,9 +102,8 @@ export function formatArticleMessage(article: ArticleData): FormattedArticle {
   // Title is plain text (not hyperlinked) since inline keyboard provides the link
   const descCaption = plainDesc ? `\n\n${escapeHtml(truncate(plainDesc, 180))}` : '';
   const captionRaw = `${header}\n<b>${title}</b>${descCaption}\n\n${footer}`;
-  // Trim caption to Telegram's 1024-char limit
-  const caption =
-    captionRaw.length <= 1024 ? captionRaw : captionRaw.slice(0, 1020).trimEnd() + '…';
+  // Trim caption to Telegram's 1024-char limit, preserving HTML tag boundaries
+  const caption = truncateHtml(captionRaw, 1024);
 
   return { text, caption, imageUrl: article.imageUrl, link };
 }
