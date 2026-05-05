@@ -44,6 +44,15 @@ const BLOCKED_HOSTNAMES = new Set([
   'localhost.localdomain',
 ]);
 
+interface FeedCacheEntry {
+  body: string;
+  etag?: string;
+  lastModified?: string;
+}
+
+const feedCache = new Map<string, FeedCacheEntry>();
+const MAX_FEED_CACHE_SIZE = 200;
+
 /**
  * Check if an IP address is safe to connect to (blocks private/internal IPs)
  */
@@ -118,18 +127,29 @@ async function fetchUrl(url: string): Promise<string> {
 
   const { gotScraping } = await import('got-scraping');
 
+  const headers: Record<string, string> = {
+    Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*',
+  };
+
+  const cacheEntry = feedCache.get(url);
+  if (cacheEntry?.etag) headers['If-None-Match'] = cacheEntry.etag;
+  if (cacheEntry?.lastModified) headers['If-Modified-Since'] = cacheEntry.lastModified;
+
   try {
     const response = await gotScraping({
       url,
       method: 'GET',
-      headers: {
-        Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*',
-      },
+      headers,
       responseType: 'text',
       timeout: { request: 10000 },
       maxRedirects: 5,
       http2: true,
     });
+
+    if (response.statusCode === 304) {
+      if (cacheEntry) return cacheEntry.body;
+      throw new FetchHttpError(304);
+    }
 
     const contentType = (response.headers['content-type'] as string)?.toLowerCase() ?? '';
     const isAllowedType = ALLOWED_CONTENT_TYPES.some((type) => contentType.includes(type));
@@ -142,8 +162,20 @@ async function fetchUrl(url: string): Promise<string> {
       throw new Error(`Feed response exceeds ${MAX_FEED_BYTES} bytes`);
     }
 
+    // Cache the response for conditional requests on next poll
+    const etag = response.headers['etag'] as string | undefined;
+    const lastModified = response.headers['last-modified'] as string | undefined;
+    if (etag || lastModified) {
+      if (feedCache.size >= MAX_FEED_CACHE_SIZE) {
+        const firstKey = feedCache.keys().next().value;
+        if (firstKey !== undefined) feedCache.delete(firstKey);
+      }
+      feedCache.set(url, { body, etag, lastModified });
+    }
+
     return body;
   } catch (err) {
+    if (err instanceof FetchHttpError && err.statusCode === 304) throw err;
     if (err && typeof err === 'object' && 'response' in err) {
       const httpErr = err as {
         response: { statusCode: number; headers: Record<string, string | string[] | undefined> };
