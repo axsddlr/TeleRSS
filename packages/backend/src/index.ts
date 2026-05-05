@@ -63,6 +63,22 @@ app.use((req, res, next) => {
   next();
 });
 
+// Track active requests for graceful shutdown (drain before DB disconnect)
+let activeRequests = 0;
+app.use((_req, res, next) => {
+  activeRequests++;
+  let done = false;
+  const decrement = () => {
+    if (!done) {
+      done = true;
+      activeRequests--;
+    }
+  };
+  res.on('finish', decrement);
+  res.on('close', decrement);
+  next();
+});
+
 // Health check endpoint (no auth required, for monitoring)
 app.get('/health', async (req, res) => {
   const health = {
@@ -100,6 +116,9 @@ app.get('/health', async (req, res) => {
 
 // API routes
 app.use('/api', apiRouter);
+
+// Return JSON 404 for unmatched /api/* routes (in dev mode, before SPA fallback)
+app.use('/api', notFoundHandler);
 
 // Serve frontend static files in production
 if (config.NODE_ENV === 'production') {
@@ -143,12 +162,22 @@ async function main() {
   // Graceful shutdown
   const shutdown = async (signal: string) => {
     console.log(`Received ${signal}, shutting down...`);
-    server.close(async () => {
-      stopScheduler();
-      await stopBot();
-      await prisma.$disconnect();
-      process.exit(0);
-    });
+    server.close();
+
+    // Drain in-flight requests before disconnecting the database
+    const DRAIN_TIMEOUT_MS = 10_000;
+    const drainStart = Date.now();
+    while (activeRequests > 0 && Date.now() - drainStart < DRAIN_TIMEOUT_MS) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    if (activeRequests > 0) {
+      console.warn(`Forcing shutdown with ${activeRequests} request(s) still in-flight`);
+    }
+
+    stopScheduler();
+    await stopBot();
+    await prisma.$disconnect();
+    process.exit(0);
   };
 
   process.on('SIGTERM', () => shutdown('SIGTERM'));
