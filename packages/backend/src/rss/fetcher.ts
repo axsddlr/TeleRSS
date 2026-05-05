@@ -16,6 +16,7 @@ const RETRYABLE_NETWORK_CODES = new Set([
 ]);
 const PER_CHAT_MIN_INTERVAL_MS = 1_250;
 const RETRY_AFTER_BUFFER_MS = 500;
+const MAX_ITEMS_PER_RUN = 50;
 
 const chatDeliveryQueue = new Map<string, Promise<void>>();
 const lastChatSendAt = new Map<string, number>();
@@ -261,6 +262,7 @@ export async function checkFeed(feedId: string): Promise<void> {
     if (!item.guid) continue;
 
     if (deliveredGuids.has(item.guid)) continue;
+    if (newItemCount >= MAX_ITEMS_PER_RUN) break;
     let sentToAnySubscription = false;
 
     // Send to all active subscriptions
