@@ -75,7 +75,7 @@ export default function Feeds() {
       </div>
 
       <AddFeedModal open={showAdd} onClose={() => setShowAdd(false)} />
-      <EditFeedModal feed={editFeed} onClose={() => setEditFeed(null)} />
+      <EditFeedModal feed={editFeed} key={editFeed?.id ?? 'new'} onClose={() => setEditFeed(null)} />
     </div>
   );
 }

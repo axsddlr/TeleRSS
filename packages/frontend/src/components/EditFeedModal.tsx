@@ -1,5 +1,5 @@
 import { Dialog } from '@headlessui/react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, Feed } from '../lib/api';
 
@@ -9,21 +9,12 @@ interface Props {
 }
 
 export default function EditFeedModal({ feed, onClose }: Props) {
-  const [name, setName] = useState('');
-  const [url, setUrl] = useState('');
-  const [interval, setInterval] = useState(15);
+  const [name, setName] = useState(feed?.name ?? '');
+  const [url, setUrl] = useState(feed?.url ?? '');
+  const [interval, setInterval] = useState(feed?.checkInterval ?? 15);
   const [error, setError] = useState('');
 
   const queryClient = useQueryClient();
-
-  useEffect(() => {
-    if (feed) {
-      setName(feed.name);
-      setUrl(feed.url);
-      setInterval(feed.checkInterval);
-      setError('');
-    }
-  }, [feed]);
 
   const mutation = useMutation({
     mutationFn: () =>

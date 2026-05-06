@@ -16,7 +16,7 @@ export default function Login() {
     try {
       await api.login(password);
       // Token is now stored in httpOnly cookie by server
-      authStorage.setToken('authenticated');
+      authStorage.setToken();
       navigate('/', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');

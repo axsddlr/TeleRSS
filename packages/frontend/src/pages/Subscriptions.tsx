@@ -212,7 +212,7 @@ export default function Subscriptions() {
         )}
       </div>
 
-      <AssignChatModal open={showAssign} onClose={() => setShowAssign(false)} />
+      <AssignChatModal open={showAssign} key={String(showAssign)} onClose={() => setShowAssign(false)} />
     </div>
   );
 }

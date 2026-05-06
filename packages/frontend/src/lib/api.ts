@@ -64,7 +64,7 @@ let isNavigatingToLogin = false;
 // Actual JWT is stored in httpOnly cookie by the server
 export const authStorage = {
   getToken: () => sessionStorage.getItem(TOKEN_KEY),
-  setToken: (_token: string) => {
+  setToken: () => {
     // Token is now stored in httpOnly cookie, but we store a flag for UI state
     sessionStorage.setItem(TOKEN_KEY, 'authenticated');
   },

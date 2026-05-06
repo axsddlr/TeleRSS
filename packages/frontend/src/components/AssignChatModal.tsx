@@ -1,5 +1,5 @@
 import { Dialog } from '@headlessui/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 
@@ -48,12 +48,6 @@ export default function AssignChatModal({ open, onClose }: Props) {
     const assignedFeedIds = new Set(subscriptions.map((sub) => sub.feedId));
     return feeds.filter((feed) => !assignedFeedIds.has(feed.id));
   }, [feeds, subscriptions]);
-
-  useEffect(() => {
-    if (feedId && !availableFeeds.some((feed) => feed.id === feedId)) {
-      setFeedId('');
-    }
-  }, [feedId, availableFeeds]);
 
   const syncMutation = useMutation({
     mutationFn: api.syncBotChats,

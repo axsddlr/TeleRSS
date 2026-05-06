@@ -13,6 +13,7 @@ export default tseslint.config(
       'react-refresh': reactRefresh,
     },
     rules: {
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
