@@ -7,6 +7,8 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     rules: {
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+
       // Security: Ban raw Prisma queries to prevent SQL injection
       // Use Prisma's query builder instead for type safety
       'no-restricted-syntax': [

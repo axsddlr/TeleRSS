@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { getSecrets, isPasswordFromEnv, updatePassword, verifyPassword } from '../auth/secrets';
-import { auditLog, createAuditEvent, getClientIP } from '../audit/logger';
+import { auditLog, createAuditEvent } from '../audit/logger';
 import { bruteForceProtection, recordFailedAttempt, clearFailedAttempts } from '../middleware/bruteForce';
 import { config } from '../config';
 
