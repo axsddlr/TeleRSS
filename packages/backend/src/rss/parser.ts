@@ -141,7 +141,7 @@ async function fetchUrl(url: string): Promise<string> {
       method: 'GET',
       headers,
       responseType: 'text',
-      timeout: { request: 10000 },
+      timeout: { request: 15000 },
       maxRedirects: 5,
       http2: true,
     });
@@ -204,23 +204,37 @@ async function fetchUrlWithRetry(url: string): Promise<string> {
     try {
       return await fetchUrl(url);
     } catch (err) {
-      const isRetryable =
+      const httpRetryable =
         err instanceof FetchHttpError &&
         (err.statusCode === 429 || err.statusCode === 503);
+
+      const isTimeout =
+        err instanceof Error &&
+        (err.message.includes('timed out') || err.message.includes('Timeout'));
+
+      const isNetworkError =
+        err instanceof Error &&
+        (err.message.includes('ECONNRESET') ||
+         err.message.includes('ETIMEDOUT') ||
+         err.message.includes('ECONNREFUSED') ||
+         err.message.includes('ENOTFOUND') ||
+         err.message.includes('EPIPE'));
+
+      const isRetryable = httpRetryable || isTimeout || isNetworkError;
 
       if (!isRetryable || attempt === MAX_ATTEMPTS) {
         throw err;
       }
 
       const backoff = Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), MAX_DELAY_MS);
-      const delayMs = (err as FetchHttpError).retryAfterMs ?? backoff;
+      const delayMs = err instanceof FetchHttpError ? (err.retryAfterMs ?? backoff) : backoff;
+      const reason = err instanceof Error ? err.message : String(err);
       console.warn(
-        `Feed fetch got ${(err as FetchHttpError).statusCode} (attempt ${attempt}/${MAX_ATTEMPTS}). Retrying in ${delayMs}ms…`,
+        `Feed fetch failed (attempt ${attempt}/${MAX_ATTEMPTS}): ${reason}. Retrying in ${delayMs}ms…`,
       );
       await new Promise((r) => setTimeout(r, delayMs));
     }
   }
-  // Unreachable, but satisfies TypeScript
   throw new Error('fetchUrlWithRetry exhausted attempts');
 }
 
