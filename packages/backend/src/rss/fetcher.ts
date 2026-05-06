@@ -303,7 +303,7 @@ async function deliverNewItems(
             where: { feedId, articleGuid: { in: itemGuids } },
             select: { articleGuid: true },
           })
-        ).map((d) => d.articleGuid)
+        ).map((d: { articleGuid: string }) => d.articleGuid)
       : [],
   );
 

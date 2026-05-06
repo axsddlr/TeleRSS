@@ -62,7 +62,7 @@ export async function ensureTopicForSubscription(input: EnsureTopicInput): Promi
   await prisma.subscription.update({
     where: { id: input.subscriptionId },
     data: { topicName, topicNameKey },
-  }).catch((err) => {
+  }).catch((err: unknown) => {
     logger.warn(`Failed to update topic name for sub ${input.subscriptionId}`, { error: String(err) });
   });
 
@@ -96,7 +96,7 @@ export async function ensureTopicForSubscription(input: EnsureTopicInput): Promi
           topicNameKey,
           topicThreadId: existing.topicThreadId,
         },
-      }).catch((err) => {
+      }).catch((err: unknown) => {
       logger.warn(`Failed to link existing topic for sub ${input.subscriptionId}`, { error: String(err) });
     });
       return existing.topicThreadId;
@@ -130,7 +130,7 @@ export async function ensureTopicForSubscription(input: EnsureTopicInput): Promi
         topicNameKey,
         topicThreadId: threadId,
       },
-    }).catch((err) => {
+    }).catch((err: unknown) => {
       logger.warn(`Failed to persist topic thread ID for sub ${input.subscriptionId}`, { error: String(err) });
     });
 

@@ -60,8 +60,8 @@ const MAX_FEED_CACHE_SIZE = 200;
 function isSafeIP(ip: string): boolean {
   try {
     const addr = ipaddr.parse(ip);
-    if (addr.kind() === 'ipv6' && addr.isIPv4MappedAddress()) {
-      return isSafeIP(addr.toIPv4Address().toString());
+    if (addr.kind() === 'ipv6' && (addr as ipaddr.IPv6).isIPv4MappedAddress()) {
+      return isSafeIP((addr as ipaddr.IPv6).toIPv4Address().toString());
     }
 
     // Only allow unicast addresses (public IPs)

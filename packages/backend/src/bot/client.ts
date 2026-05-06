@@ -144,7 +144,7 @@ export async function syncKnownChats(): Promise<{ updated: number; removed: numb
   let removed = 0;
 
   await Promise.all(
-    chats.map(async (chat) => {
+    chats.map(async (chat: { chatId: string }) => {
       try {
         const member = await getBot().telegram.getChatMember(chat.chatId, botId);
         if (member.status === 'left' || member.status === 'kicked') {

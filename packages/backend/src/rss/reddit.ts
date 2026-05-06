@@ -91,6 +91,12 @@ export function tryAdaptRedditFeed(url: string): string | null {
   return jsonUrl;
 }
 
+interface RedditResponse {
+  data?: {
+    children?: Array<{ data: RedditPost }>;
+  };
+}
+
 export async function fetchAndConvertRedditFeed(jsonUrl: string): Promise<string> {
   const response = await fetch(jsonUrl, {
     headers: {
@@ -104,7 +110,7 @@ export async function fetchAndConvertRedditFeed(jsonUrl: string): Promise<string
     throw new Error(`Reddit API returned ${response.status}`);
   }
 
-  const data = await response.json();
+  const data = await response.json() as RedditResponse;
   const children = data?.data?.children ?? [];
 
   const posts: RedditPost[] = children

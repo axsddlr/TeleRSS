@@ -21,6 +21,7 @@ export type AuditEventType =
   | 'feed.update'
   | 'feed.delete'
   | 'feed.refresh'
+  | 'feed.force-push'
   | 'subscription.create'
   | 'subscription.update'
   | 'subscription.delete'

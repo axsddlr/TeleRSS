@@ -30,7 +30,7 @@ statsRouter.get('/', async (_req: Request, res: Response) => {
       totalFeeds,
       totalSubs,
       itemsDelivered24h,
-      recentActivity: recentActivity.map((item) => ({
+      recentActivity: recentActivity.map((item: { id: string; feed: { name: string }; articleTitle: string | null; chatId: string | null; deliveredAt: Date }) => ({
         id: item.id,
         feedName: item.feed.name,
         articleTitle: item.articleTitle,

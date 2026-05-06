@@ -178,7 +178,7 @@ subscriptionsRouter.post('/bulk', async (req: Request, res: Response) => {
       where: { id: { in: feedIds } },
       select: { id: true, name: true },
     });
-    const feedNameById = new Map(feeds.map((feed) => [feed.id, feed.name]));
+    const feedNameById = new Map<string, string>(feeds.map((feed: { id: string; name: string }) => [feed.id, feed.name]));
 
     const results = await Promise.allSettled(
       feedIds.map(async (feedId) => {
