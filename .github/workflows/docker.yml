@@ -38,10 +38,10 @@ jobs:
         run: pnpm --filter frontend exec npx tsc --noEmit
 
       - name: Lint backend
-        run: pnpm --filter backend eslint src/
+        run: pnpm --filter backend lint
 
       - name: Lint frontend
-        run: pnpm --filter frontend eslint src/
+        run: pnpm --filter frontend lint
 
   build-and-push:
     name: Build and push to ghcr.io
