@@ -3,6 +3,7 @@ import { lookup } from 'dns/promises';
 import { isIP } from 'net';
 import ipaddr from 'ipaddr.js';
 import { URL } from 'url';
+import { tryAdaptRedditFeed, fetchAndConvertRedditFeed } from './reddit';
 
 export interface ParsedFeed {
   title: string;
@@ -124,6 +125,11 @@ class FetchHttpError extends Error {
 
 async function fetchUrl(url: string): Promise<string> {
   await validateUrlSafety(url);
+
+  const redditJsonUrl = tryAdaptRedditFeed(url);
+  if (redditJsonUrl) {
+    return await fetchAndConvertRedditFeed(redditJsonUrl);
+  }
 
   const { gotScraping } = await import('got-scraping');
 
