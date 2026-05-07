@@ -282,7 +282,7 @@ function extractImageUrl(item: any): string | undefined {
   if (mt?.$?.url) return mt.$?.url as string;
 
   // 4. First <img> in full HTML content
-  const html: string = item['content:encoded'] ?? item.content ?? '';
+  const html: string = item['content:encoded'] ?? item.content ?? item.summary ?? '';
   if (html) return extractFirstImage(html);
 
   return undefined;
